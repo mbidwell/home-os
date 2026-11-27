@@ -1,11 +1,38 @@
 <!doctype html>
-<!-- Source for icons/*.png. Render at 512, 192, and 180 px squares with tools/shots.sh icons. -->
+<!-- Source for icons/*.png. tools/shots.sh icons renders each theme at 512 and scales down.
+     ?theme=night (default) | blush | roast -->
 <html><head><meta charset="utf-8"><style>
-html,body{margin:0;height:100%;background:#272D3F;overflow:hidden}
+html,body{margin:0;height:100%;overflow:hidden}
 body{display:grid;place-items:center}
-svg{width:56%;height:56%}
+svg{width:100%;height:100%}
 </style></head><body>
-<svg viewBox="0 0 24 24" fill="none" stroke="#1FE6A0" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-<path d="M3.5 11 12 3.8l8.5 7.2"/><path d="M5.5 9.6V20h13V9.6"/><path d="M10 20v-5.5h4V20"/>
-</svg>
+<script>
+var t = new URLSearchParams(location.search).get('theme') || 'night';
+var S = {
+  night: '<defs><linearGradient id="g" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#3A4360"/><stop offset="1" stop-color="#1C2030"/></linearGradient></defs>' +
+    '<rect width="512" height="512" fill="url(#g)"/>' +
+    // chimney (behind roof), solid rounded house, wavy smoke lines
+    '<rect x="316" y="132" width="44" height="100" rx="10" fill="#1FE6A0"/>' +
+    '<path d="M256 112c9 0 17 3 24 9l112 98c9 8 6 23-6 23h-22v118c0 18-14 32-32 32H180c-18 0-32-14-32-32V242h-22c-12 0-15-15-6-23l112-98c7-6 15-9 24-9z" fill="#1FE6A0" transform="translate(0 20)"/>' +
+    '<path d="M330 70c-14 14 14 26 0 42M358 62c-12 12 12 22 0 36" fill="none" stroke="#E8E3D7" stroke-width="9" stroke-linecap="round" opacity=".75"/>',
+  blush: '<defs><linearGradient id="g" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#F9D3DF"/><stop offset="1" stop-color="#EE9CB7"/></linearGradient></defs>' +
+    '<rect width="512" height="512" fill="url(#g)"/>' +
+    // soft rounded house
+    '<path d="M256 112c9 0 17 3 24 9l112 98c9 8 6 23-6 23h-22v118c0 18-14 32-32 32H180c-18 0-32-14-32-32V242h-22c-12 0-15-15-6-23l112-98c7-6 15-9 24-9z" fill="#FFF8F9"/>' +
+    // heart
+    '<path d="M256 352c-4 0-8-2-11-4-27-21-55-43-55-72 0-19 14-33 32-33 14 0 26 8 34 20 8-12 20-20 34-20 18 0 32 14 32 33 0 29-28 51-55 72-3 2-7 4-11 4z" fill="#E0688F"/>' +
+    // sparkles
+    '<path d="M400 120l7 17 17 7-17 7-7 17-7-17-17-7 17-7z" fill="#FFF8F9" opacity=".9"/>' +
+    '<circle cx="118" cy="150" r="9" fill="#FFF8F9" opacity=".75"/>',
+  roast: '<defs><linearGradient id="g" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#64564B"/><stop offset="1" stop-color="#3E342E"/></linearGradient></defs>' +
+    '<rect width="512" height="512" fill="url(#g)"/>' +
+    '<path d="M256 112c9 0 17 3 24 9l112 98c9 8 6 23-6 23h-22v118c0 18-14 32-32 32H180c-18 0-32-14-32-32V242h-22c-12 0-15-15-6-23l112-98c7-6 15-9 24-9z" fill="#EDE6D9"/>' +
+    // rounded door in turquoise with a knob
+    '<rect x="220" y="262" width="72" height="110" rx="30" fill="#00DDE8"/>' +
+    '<circle cx="272" cy="320" r="6" fill="#05292B"/>' +
+    // steam curls
+    '<path d="M376 92c-14 14 14 26 0 42M404 100c-12 12 12 22 0 36" fill="none" stroke="#EDE6D9" stroke-width="9" stroke-linecap="round" opacity=".7"/>'
+};
+document.body.innerHTML = '<svg viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">' + (S[t] || S.night) + '</svg>';
+</script>
 </body></html>

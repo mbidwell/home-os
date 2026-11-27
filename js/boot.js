@@ -5,6 +5,8 @@
   var K_DIM = 'homeos-dim';
   var CLASSES = { night: 't-night', blush: 't-cozy t-blush', roast: 't-cozy t-roast' };
   var BAR = { night: '#272D3F', dim: '#1C2030', blush: '#FBEFF1', roast: '#4A3F38' };
+  // Home screen icon per theme. iPhone reads it once, when the app is added to the home screen.
+  var ICON = { night: 'icons/apple-touch-icon.png?v=3', blush: 'icons/apple-touch-icon-blush.png?v=1', roast: 'icons/apple-touch-icon-roast.png?v=2' };
 
   function read(k, d) { try { var v = localStorage.getItem(k); return v == null ? d : v; } catch (e) { return d; } }
   function write(k, v) { try { localStorage.setItem(k, v); } catch (e) {} }
@@ -23,6 +25,10 @@
     }
   }
 
+  // ?look=blush|roast|night picks this phone's theme before installing, so the home screen icon matches.
+  var look = new URLSearchParams(location.search).get('look');
+  if (look && CLASSES[look] && !override) write(K_THEME, look);
+
   function now() { return override && override.clock ? new Date(override.clock) : new Date(); }
 
   function state() {
@@ -40,6 +46,8 @@
     document.documentElement.className = CLASSES[s.theme] + (s.dimmed ? ' t-dim' : '');
     var m = document.querySelector('meta[name="theme-color"]');
     if (m) m.setAttribute('content', BAR[s.dimmed ? 'dim' : s.theme]);
+    var i = document.querySelector('link[rel="apple-touch-icon"]');
+    if (i) i.setAttribute('href', ICON[s.theme]);
     return s;
   }
 

@@ -1,13 +1,13 @@
 // Home OS service worker.
 // Bump VERSION every release. This worker only ever deletes caches it owns (homeos-*).
 // Other apps on this origin keep their own caches and storage untouched.
-const VERSION = 'homeos-shell-v2';
+const VERSION = 'homeos-shell-v4';
 const FONTS = 'homeos-fonts-v1';
 const OWN = [VERSION, FONTS];
 const SHELL = [
   './', 'index.html', 'config.js', 'manifest.webmanifest',
   'css/app.css', 'js/boot.js', 'js/app.js', 'js/api.js', 'js/particles.js',
-  'icons/icon-192.png', 'icons/icon-512.png', 'icons/apple-touch-icon.png'
+  'icons/icon-192.png', 'icons/icon-512.png', 'icons/apple-touch-icon.png', 'icons/apple-touch-icon-blush.png', 'icons/apple-touch-icon-roast.png'
 ];
 
 self.addEventListener('install', (e) => {

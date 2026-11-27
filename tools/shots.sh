@@ -16,10 +16,14 @@ shot() { # out url w h
 
 if [ "${1:-}" = "icons" ]; then
   mkdir -p icons
-  DPR=1 shot icons/icon-512.png "file://$ROOT/tools/icon.html" 512 512
+  DPR=1 shot icons/icon-512.png "file://$ROOT/tools/icon.html?theme=night" 512 512
   # Headless Chrome renders small windows blank, so scale the smaller sizes down from 512.
   sips -z 192 192 icons/icon-512.png --out icons/icon-192.png >/dev/null
   sips -z 180 180 icons/icon-512.png --out icons/apple-touch-icon.png >/dev/null
+  for t in blush roast; do
+    DPR=1 shot "review/icon-$t.png" "file://$ROOT/tools/icon.html?theme=$t" 512 512
+    sips -z 180 180 "review/icon-$t.png" --out "icons/apple-touch-icon-$t.png" >/dev/null
+  done
   exit 0
 fi
 
