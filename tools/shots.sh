@@ -17,8 +17,9 @@ shot() { # out url w h
 if [ "${1:-}" = "icons" ]; then
   mkdir -p icons
   DPR=1 shot icons/icon-512.png "file://$ROOT/tools/icon.html" 512 512
-  DPR=1 shot icons/icon-192.png "file://$ROOT/tools/icon.html" 192 192
-  DPR=1 shot icons/apple-touch-icon.png "file://$ROOT/tools/icon.html" 180 180
+  # Headless Chrome renders small windows blank, so scale the smaller sizes down from 512.
+  sips -z 192 192 icons/icon-512.png --out icons/icon-192.png >/dev/null
+  sips -z 180 180 icons/icon-512.png --out icons/apple-touch-icon.png >/dev/null
   exit 0
 fi
 
