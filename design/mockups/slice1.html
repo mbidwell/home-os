@@ -1,0 +1,302 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Home OS slice 1 mockups (A chosen)</title>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Mono:wght@400;500&family=Inter:wght@400;500;600&family=Nunito:wght@500;600;700;800&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box}
+body{margin:0;background:#E7E4DE;font-family:Inter,system-ui,sans-serif;color:#2A2926;padding:28px 32px 40px}
+.bar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:0 auto 22px;max-width:1040px}
+.bar button{font:500 14px Inter;padding:10px 14px;border-radius:12px;border:1px solid #CFCBC3;background:#F6F4F0;color:#2A2926;cursor:pointer}
+.bar button[aria-pressed=true]{background:#2A2926;color:#F6F4F0;border-color:#2A2926}
+.shot .bar{display:none}
+.title{max-width:1040px;margin:0 auto 18px;font:600 20px Inter}
+.rowlab{max-width:1040px;margin:0 auto 12px;font:600 15px Inter;color:#3B3934}
+.rowlab span{font-weight:400;color:#6A665E}
+.row{display:grid;grid-template-columns:repeat(3,320px);gap:40px;justify-content:center;margin-bottom:34px}
+.cap{font:500 13px Inter;color:#5F5B54;margin:0 0 12px 6px}
+
+/* ---------- themes: 60 main / 30 text+surface / 10 accent ---------- */
+.t-night{--bg:#272D3F;--s1:#30374B;--s2:#3B4359;--ink:#E8E3D7;--ink2:#A9ADBC;--hero:#DDD8CB;--hero-ink:#232838;--hero-ink2:#4E5366;--acc:#1FE6A0;--on-acc:#08231A;--ok:#8FD3B6;--line:rgba(243,238,226,.10);--sh:0 18px 40px rgba(2,7,15,.55);--sh-soft:0 8px 22px rgba(2,7,15,.40);
+  --f-head:'Bebas Neue',sans-serif;--f-body:Inter,sans-serif;--f-num:'DM Mono',monospace;--h1:46px;--h1b:54px;--h2:30px;--hw:400;--ht:.01em;--hl:.95}
+.t-dim{--bg:#1C2030;--s1:#252A3B;--s2:#2E3447;--ink:#E9CD98;--ink2:#A8916C;--hero:#2C2317;--hero-ink:#F0D6A4;--hero-ink2:#C2A77B;--acc:#E8A84C;--on-acc:#1C1306;--ok:#BDB57C;--line:rgba(233,205,152,.10)}
+.t-cozy{--f-head:Nunito,sans-serif;--f-body:Nunito,sans-serif;--f-num:Nunito,sans-serif;--h1:30px;--h1b:36px;--h2:23px;--hw:800;--ht:-.015em;--hl:1.08}
+.t-blush{--bg:#FBEFF1;--s1:#FFF8F9;--s2:#F6E2E8;--ink:#4A2141;--ink2:#83607A;--hero:#4A2141;--hero-ink:#FBEFF1;--hero-ink2:#DDBFD1;--acc:#EE9CB7;--on-acc:#3E1A36;--ok:#4F8A64;--line:rgba(74,33,65,.11);--sh:0 18px 36px rgba(74,33,65,.16);--sh-soft:0 8px 20px rgba(74,33,65,.08)}
+.t-roast{--bg:#4A3F38;--s1:#56493F;--s2:#64564B;--ink:#EDE6D9;--ink2:#CBBFB0;--hero:#D9D1C3;--hero-ink:#3A302A;--hero-ink2:#6B5D52;--acc:#00DDE8;--on-acc:#05292B;--ok:#9FD0A8;--line:rgba(237,230,217,.11);--sh:0 18px 38px rgba(20,14,10,.42);--sh-soft:0 8px 20px rgba(20,14,10,.28)}
+
+/* ---------- phone frame ---------- */
+.ph{width:320px;height:680px;border-radius:46px;background:var(--bg);color:var(--ink);position:relative;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 0 0 9px #15161A,0 30px 60px rgba(0,0,0,.28);font-family:var(--f-body);-webkit-font-smoothing:antialiased}
+.ph::after{content:"";position:absolute;left:50%;bottom:8px;width:118px;height:5px;margin-left:-59px;border-radius:3px;background:var(--ink);opacity:.35;z-index:5}
+.sb{height:46px;flex:none;display:flex;align-items:flex-end;padding:0 30px 4px;font:500 14px var(--f-num);position:relative;z-index:2}
+h1,h2{font-family:var(--f-head);font-weight:var(--hw);letter-spacing:var(--ht);line-height:var(--hl);margin:0}
+h1{font-size:var(--h1)}
+.num{font-family:var(--f-num)}
+.eyebrow{font:500 13px/1 var(--f-num);color:var(--ink2);margin:0 0 10px}
+svg.i{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round;flex:none}
+main{flex:1;min-height:0;overflow:hidden;position:relative;z-index:1}
+
+/* motion: press + entrance */
+.press{transition:transform .16s cubic-bezier(.2,.8,.2,1),background-color .2s,box-shadow .2s;cursor:pointer;-webkit-tap-highlight-color:transparent}
+.press:active{transform:scale(.97)}
+.rise{animation:rise .55s cubic-bezier(.2,.8,.2,1) both}
+.rise.d1{animation-delay:.06s}.rise.d2{animation-delay:.12s}.rise.d3{animation-delay:.18s}
+@keyframes rise{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:none}}
+.shot .rise,.shot .in.focus::after{animation:none}
+@media (prefers-reduced-motion:reduce){.rise{animation:none}.press{transition:none}.press:active{transform:none}}
+
+/* shared controls */
+.sync{display:inline-flex;align-items:center;gap:7px;font:500 13px var(--f-body);color:var(--ink2);white-space:nowrap}
+.sync i{width:8px;height:8px;border-radius:50%;background:var(--ok);box-shadow:0 0 0 3px color-mix(in srgb,var(--ok) 25%,transparent)}
+.pri{width:100%;height:56px;border:0;border-radius:18px;background:var(--acc);color:var(--on-acc);font:700 17px var(--f-body);display:flex;align-items:center;justify-content:center;gap:10px}
+.lbl{font:600 13px var(--f-body);color:var(--ink2);margin:0 0 7px 4px;display:block}
+.in{height:56px;border-radius:18px;background:var(--s2);border:1.5px solid transparent;padding:0 16px;display:flex;align-items:center;font-size:16px;color:var(--ink2);margin-bottom:14px}
+.in.focus{border-color:var(--ink);color:var(--ink)}
+.in.focus::after{content:"";width:2px;height:20px;background:var(--ink);margin-left:2px;animation:blink 1s steps(2) infinite}
+@keyframes blink{50%{opacity:0}}
+.tg{width:54px;height:34px;border-radius:999px;background:var(--acc);position:relative;flex:none}
+.tg::after{content:"";position:absolute;right:4px;top:4px;width:26px;height:26px;border-radius:50%;background:var(--bg);box-shadow:0 2px 6px rgba(0,0,0,.18)}
+.prog{display:flex;align-items:center;gap:12px}
+.prog .trk{flex:1;height:8px;border-radius:99px;background:color-mix(in srgb,var(--hero-ink) 16%,transparent);overflow:hidden}
+.prog .trk b{display:block;height:100%;width:66%;border-radius:99px;background:var(--acc)}
+.prog span{font:500 13px var(--f-num);color:var(--hero-ink2)}
+.sw{display:flex}
+.sw i{width:18px;height:18px;border-radius:50%;margin-right:-5px;box-shadow:0 0 0 2px var(--s1)}
+canvas.fx{position:absolute;inset:0;width:100%;height:100%;color:var(--acc);pointer-events:none;z-index:0}
+
+/* ---------- direction A: layered cards ---------- */
+.A .hd{padding:12px 22px 16px;position:relative;z-index:1}
+.A .hd .top{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}
+.A .hd .top .eyebrow{margin:0}
+.A .hd .sync{height:32px;padding:0 12px;border-radius:999px;background:var(--s1);box-shadow:var(--sh-soft)}
+.A main{padding:0 18px}
+.A .stack{position:relative;margin:0 0 28px}
+.A .stack::before,.A .stack::after{content:"";position:absolute;border-radius:26px;z-index:0}
+.A .stack::before{left:12px;right:12px;bottom:-11px;height:60px;background:color-mix(in srgb,var(--hero) 45%,var(--bg))}
+.A .stack::after{left:26px;right:26px;bottom:-21px;height:60px;background:color-mix(in srgb,var(--hero) 20%,var(--bg))}
+.A .hero{position:relative;z-index:2;background:var(--hero);color:var(--hero-ink);border-radius:28px;padding:20px 22px;box-shadow:var(--sh)}
+.A .hero .eyebrow{color:var(--hero-ink2)}
+.A .hero h2{font-size:var(--h2);margin:0 0 10px}
+.A .hero p{margin:0 0 18px;font-size:15px;line-height:1.45;color:var(--hero-ink2)}
+.A .card{background:var(--s1);border-radius:24px;padding:12px 16px;box-shadow:var(--sh-soft);margin-bottom:10px;display:flex;gap:14px;align-items:center;min-height:68px}
+.A .ic{width:46px;height:46px;border-radius:15px;background:var(--s2);display:grid;place-items:center;flex:none}
+.A .card b{display:block;font-size:16px;font-weight:700;margin-bottom:3px}
+.A .card small{font-size:13.5px;color:var(--ink2)}
+.A .dock{margin:0 18px 24px;height:70px;border-radius:26px;background:var(--s1);box-shadow:var(--sh);display:flex;padding:7px;gap:7px;flex:none;position:relative;z-index:2}
+.A .dock button{flex:1;border:0;border-radius:20px;background:transparent;color:var(--ink2);font:700 14px var(--f-body);display:flex;align-items:center;justify-content:center;gap:8px;min-height:56px}
+.A .dock .on{background:var(--acc);color:var(--on-acc)}
+.A .gt{font:700 13px var(--f-body);color:var(--ink2);margin:0 0 8px 6px}
+.A .grp{background:var(--s1);border-radius:24px;box-shadow:var(--sh-soft);padding:2px 16px;margin-bottom:14px}
+.A .fl{min-height:56px;display:flex;align-items:center;justify-content:space-between;font-size:16px}
+.A .fl+.fl{border-top:1px solid var(--line)}
+.A .fl span{color:var(--ink2)}
+.A .tiles{display:grid;grid-template-columns:1fr 1fr;gap:10px;padding:12px 0}
+.A .tile{border-radius:20px;background:var(--s2);border:2px solid transparent;padding:12px;min-height:76px;display:flex;flex-direction:column;justify-content:space-between;font-weight:700;font-size:15px}
+.A .tile.sel{border-color:var(--ink)}
+.A .ghost{width:100%;height:56px;border-radius:18px;border:1.5px solid var(--line);background:transparent;color:var(--ink);font:700 16px var(--f-body)}
+.A .si{position:relative;z-index:1;flex:1;display:flex;flex-direction:column;justify-content:flex-end;padding:0 18px 30px}
+.A .mark{width:62px;height:62px;border-radius:21px;background:var(--s1);box-shadow:var(--sh-soft);display:grid;place-items:center;margin:0 0 18px 4px}
+.A .mark svg{width:30px;height:30px}
+.A .si h1{font-size:calc(var(--h1) * 1.3);margin:0 0 8px 4px}
+.A .si .sub{font-size:16px;line-height:1.45;color:var(--ink2);margin:0 0 22px 4px}
+.A .form{background:var(--s1);border-radius:28px;padding:18px 16px 16px;box-shadow:var(--sh)}
+.foot{font-size:12.5px;color:var(--ink2);text-align:center;margin:14px 0 0;line-height:1.4}
+
+/* ---------- direction B: one sheet, flat rows ---------- */
+.B .hd{padding:14px 26px 22px;position:relative;z-index:1}
+.B .hd .top{display:flex;justify-content:space-between;align-items:center;margin-bottom:18px}
+.B .hd .top .eyebrow{margin:0}
+.B .hd h1{font-size:var(--h1b)}
+.B .sheet{flex:1;min-height:0;background:var(--s1);border-radius:34px 34px 0 0;padding:22px 20px 0;display:flex;flex-direction:column;position:relative;z-index:1}
+.B .hero{background:var(--hero);color:var(--hero-ink);border-radius:24px;padding:20px 20px 20px;margin-bottom:8px}
+.B .hero .eyebrow{color:var(--hero-ink2)}
+.B .hero h2{font-size:var(--h2);margin:0 0 14px}
+.B .segs{display:flex;gap:6px}
+.B .segs i{flex:1;height:6px;border-radius:9px;background:color-mix(in srgb,var(--hero-ink) 16%,transparent)}
+.B .segs i.f{background:var(--acc)}
+.B .segs+p{margin:10px 0 0;font:500 13px var(--f-num);color:var(--hero-ink2)}
+.B .rw{min-height:60px;display:flex;align-items:center;gap:14px;border-bottom:1px solid var(--line);font-size:16px}
+.B .rw:last-child{border-bottom:0}
+.B .rw .t{flex:1}
+.B .rw small{display:block;font-size:13.5px;color:var(--ink2);margin-top:2px}
+.B .rw .v{color:var(--ink2)}
+.B .rw .chev{color:var(--ink2);width:18px;height:18px}
+.B .sec{font:700 13px var(--f-body);color:var(--ink2);margin:16px 0 2px}
+.B .sec:first-child{margin-top:0}
+.B .seg{display:flex;background:var(--bg);border-radius:18px;padding:4px;margin:10px 0 6px}
+.B .seg div{flex:1;height:48px;border-radius:14px;display:grid;place-items:center;font-weight:700;font-size:15px;color:var(--ink2)}
+.B .seg .on{background:var(--ink);color:var(--bg)}
+.B .tabs{display:flex;background:var(--s1);border-top:1px solid var(--line);padding:0 10px 24px;flex:none;position:relative;z-index:1}
+.B .tabs button{flex:1;border:0;background:transparent;min-height:64px;color:var(--ink2);font:600 12.5px var(--f-body);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px;position:relative}
+.B .tabs .on{color:var(--ink)}
+.B .tabs .on::before{content:"";position:absolute;top:-1px;width:34px;height:3px;border-radius:0 0 3px 3px;background:var(--acc)}
+.B .art{position:relative;flex:1;min-height:0;display:flex;flex-direction:column;justify-content:flex-end;padding:0 26px 26px}
+.B .art h1{font-size:calc(var(--h1b) * 1.05);position:relative;z-index:1}
+.B .art .sub{position:relative;z-index:1;font-size:16px;color:var(--ink2);margin:12px 0 0;line-height:1.45}
+.B .sheet.form{flex:none;padding:24px 20px 30px}
+.C .sheet{box-shadow:0 -10px 30px rgba(0,0,0,.10)}
+.C .stack{position:relative;margin:0 0 26px}
+.C .stack::before,.C .stack::after{content:"";position:absolute;border-radius:24px;z-index:0}
+.C .stack::before{left:12px;right:12px;bottom:-10px;height:50px;background:color-mix(in srgb,var(--hero) 45%,var(--s1))}
+.C .stack::after{left:26px;right:26px;bottom:-19px;height:50px;background:color-mix(in srgb,var(--hero) 20%,var(--s1))}
+.C .hero{position:relative;z-index:2;box-shadow:var(--sh);margin:0}
+.C .hd h1{font-size:var(--h1b)}
+</style>
+</head>
+<body>
+<div class="bar" id="bar"></div>
+<div id="out"></div>
+<script>
+const I={
+ home:'<path d="M3.5 11 12 3.8l8.5 7.2"/><path d="M5.5 9.6V20h13V9.6"/><path d="M10 20v-5.5h4V20"/>',
+ set:'<path d="M4 7h9M17 7h3M4 12h3M11 12h9M4 17h11M19 17h1"/><circle cx="15" cy="7" r="2"/><circle cx="9" cy="12" r="2"/><circle cx="17" cy="17" r="2"/>',
+ ppl:'<circle cx="9" cy="8.5" r="3.3"/><path d="M3 19.5c.8-3.3 3.2-5 6-5s5.2 1.7 6 5"/><circle cx="17" cy="9.5" r="2.4"/><path d="M16.5 14.6c2.3.1 3.9 1.6 4.5 4.4"/>',
+ moon:'<path d="M19.5 14.6A7.8 7.8 0 1 1 9.4 4.5a6.2 6.2 0 0 0 10.1 10.1z"/>',
+ sun:'<circle cx="12" cy="12" r="4"/><path d="M12 2.8v2M12 19.2v2M2.8 12h2M19.2 12h2M5.5 5.5l1.4 1.4M17.1 17.1l1.4 1.4M5.5 18.5l1.4-1.4M17.1 6.9l1.4-1.4"/>',
+ chev:'<path d="M9 5.5 15.5 12 9 18.5"/>',
+ arr:'<path d="M5 12h14M13 6l6 6-6 6"/>',
+ phone:'<rect x="6.5" y="2.8" width="11" height="18.4" rx="3"/><path d="M10.5 17.8h3"/>',
+ out:'<path d="M14 4h4.5A1.5 1.5 0 0 1 20 5.5v13a1.5 1.5 0 0 1-1.5 1.5H14"/><path d="M10 8l-4 4 4 4M6 12h10"/>'
+};
+const ic=(k,c='i')=>`<svg class="${c}" viewBox="0 0 24 24" aria-hidden="true">${I[k]}</svg>`;
+const TH={
+ night:{cls:'t-night',label:'Night Shift',night:true,time:'7:41',greet:'Good morning,',sw:['#272D3F','#DDD8CB','#1FE6A0'],phone:'Night Shift, dims at 10 PM'},
+ dim:{cls:'t-night t-dim',label:'Night Shift, auto dim (10 PM to 6 AM)',night:true,time:'10:42',greet:'Good evening,',sw:['#1C2030','#E9CD98','#E8A84C'],phone:'Dimmed until 6 AM'},
+ blush:{cls:'t-cozy t-blush',label:'Cozy, blush and plum',night:false,time:'7:41',greet:'Good morning,',sw:['#FBEFF1','#4A2141','#EE9CB7'],phone:'Cozy, blush and plum'},
+ roast:{cls:'t-cozy t-roast',label:'Cozy, hojicha and oat (dark)',night:false,time:'7:41',greet:'Good morning,',sw:['#4A3F38','#D9D1C3','#00DDE8'],phone:'Cozy, hojicha and oat'}
+};
+const COZY_SW={blush:TH.blush.sw,roast:TH.roast.sw};
+const sw=a=>`<span class="sw">${a.map(c=>`<i style="background:${c}"></i>`).join('')}</span>`;
+const sb=t=>`<div class="sb">${t.time}</div>`;
+const sync=`<span class="sync"><i></i>Synced</span>`;
+
+/* ---- A ---- */
+const A={
+signin:t=>`<canvas class="fx"></canvas>${sb(t)}
+ <div class="si">
+  <div class="mark rise">${ic('home')}</div>
+  <h1 class="rise d1">Home</h1>
+  <p class="sub rise d1">Your household, on both phones.</p>
+  <div class="form rise d2">
+   <label class="lbl">Email</label><div class="in focus">you@example.com</div>
+   <label class="lbl">Password</label><div class="in">••••••••••</div>
+   <button class="pri press">Sign in ${ic('arr')}</button>
+   <p class="foot">Stays signed in on this phone.</p>
+  </div>
+ </div>`,
+home:t=>`${sb(t)}
+ <div class="hd"><div class="top"><p class="eyebrow">Wed, Nov 25</p>${sync}</div><h1>${t.greet}<br>Sam</h1></div>
+ <main>
+  <div class="stack rise"><section class="hero">
+   <p class="eyebrow">Next up</p><h2>Get Riley signed in</h2>
+   <p>Open Home on their phone, add it to the home screen, and sign in.</p>
+   <div class="prog"><div class="trk"><b></b></div><span>2 of 3</span></div>
+  </section></div>
+  <section class="card press rise d1"><div class="ic">${ic('ppl')}</div><div><b>Household</b><small>Sam signed in, Riley invited</small></div></section>
+  <section class="card press rise d2"><div class="ic">${ic(t.night?'moon':'sun')}</div><div><b>This phone</b><small>${t.phone}</small></div></section>
+ </main>
+ <nav class="dock"><button class="on press">${ic('home')}Home</button><button class="press">${ic('set')}Settings</button></nav>`,
+settings:t=>`${sb(t)}
+ <div class="hd"><div class="top"><p class="eyebrow">Theme is per phone</p>${sync}</div><h1>Settings</h1></div>
+ <main>
+  <p class="gt">Names</p>
+  <div class="grp rise"><div class="fl">You<span>Sam</span></div><div class="fl">Partner<span>Riley</span></div></div>
+  <p class="gt">Theme</p>
+  <div class="grp rise d1">
+   <div class="tiles">
+    <div class="tile press ${t.night?'':'sel'}">${sw(t.night?COZY_SW.blush:t.sw)}Cozy</div>
+    <div class="tile press ${t.night?'sel':''}">${sw(t.night?t.sw:TH.night.sw)}Night Shift</div>
+   </div>
+   <div class="fl" style="border-top:1px solid var(--line)">${t.night?'Dim 10 PM to 6 AM':'Dusk 10 PM to 6 AM'}<span class="tg"></span></div>
+  </div>
+  <button class="ghost press rise d2">Sign out</button>
+ </main>
+ <nav class="dock"><button class="press">${ic('home')}Home</button><button class="on press">${ic('set')}Settings</button></nav>`
+};
+
+/* ---- B ---- */
+const tabs=on=>`<nav class="tabs"><button class="press ${on==='h'?'on':''}">${ic('home')}Home</button><button class="press ${on==='s'?'on':''}">${ic('set')}Settings</button></nav>`;
+const B={
+signin:t=>`${sb(t)}
+ <div class="art"><canvas class="fx"></canvas><h1 class="rise">Welcome<br>home.</h1><p class="sub rise d1">Your household, on both phones.</p></div>
+ <div class="sheet form rise d2">
+  <label class="lbl">Email</label><div class="in focus">you@example.com</div>
+  <label class="lbl">Password</label><div class="in">••••••••••</div>
+  <button class="pri press">Sign in</button>
+  <p class="foot">Stays signed in on this phone.</p>
+ </div>`,
+home:t=>`${sb(t)}
+ <div class="hd"><div class="top"><p class="eyebrow">Wed, Nov 25</p>${sync}</div><h1 class="rise">${t.greet}<br>Sam</h1></div>
+ <div class="sheet">
+  <section class="hero rise d1"><p class="eyebrow">Next up</p><h2>Get Riley signed in</h2><div class="segs"><i class="f"></i><i class="f"></i><i></i></div><p>2 of 3 setup steps done</p></section>
+  <div class="rw press rise d2">${ic('ppl')}<div class="t">Household<small>Sam signed in, Riley invited</small></div>${ic('chev','i chev')}</div>
+  <div class="rw press rise d3">${ic(t.night?'moon':'sun')}<div class="t">This phone<small>${t.phone}</small></div>${ic('chev','i chev')}</div>
+ </div>${tabs('h')}`,
+settings:t=>`${sb(t)}
+ <div class="hd"><div class="top"><p class="eyebrow">Theme is per phone</p>${sync}</div><h1>Settings</h1></div>
+ <div class="sheet">
+  <p class="sec">Names</p>
+  <div class="rw press"><div class="t">You</div><span class="v">Sam</span>${ic('chev','i chev')}</div>
+  <div class="rw press"><div class="t">Partner</div><span class="v">Riley</span>${ic('chev','i chev')}</div>
+  <p class="sec">Theme</p>
+  <div class="seg"><div class="${t.night?'':'on'}">Cozy</div><div class="${t.night?'on':''}">Night Shift</div></div>
+  <div class="rw">${ic('moon')}<div class="t">${t.night?'Dim 10 PM to 6 AM':'Dusk 10 PM to 6 AM'}</div><span class="tg"></span></div>
+  <div class="rw press" style="color:var(--ink2)">${ic('out')}<div class="t">Sign out</div></div>
+ </div>${tabs('s')}`
+};
+
+const C={
+ signin:B.signin,
+ home:t=>B.home(t).replace(/<section class="hero rise d1">([\s\S]*?)<\/section>/,'<div class="stack rise d1"><section class="hero">$1</section></div>'),
+ settings:B.settings
+};
+const DIRS={C:{name:'A+B · Sheet with layered hero',desc:'B layout, A stacked Next up card and depth',f:C},A:{name:'A · Layered',desc:'stacked cards, soft depth, floating dock',f:A},B:{name:'B · Sheet',desc:'one rising sheet, flat rows, full-width tab bar',f:B}};
+const SCREENS=[['signin','Sign in'],['home','Home'],['settings','Settings']];
+const q=new URLSearchParams(location.search);
+const shot=q.has('shot'); if(shot)document.body.classList.add('shot');
+let state={theme:q.get('theme')||'night'};
+
+function render(){
+ const t=TH[state.theme];
+ let h=`<p class="title">Home OS slice 1 · ${t.label}</p>`;
+ for(const d of (q.get('dirs')||'A,C').split(',')){
+  h+=`<p class="rowlab">${DIRS[d].name} <span>· ${DIRS[d].desc}</span></p><div class="row">`;
+  for(const[k,n]of SCREENS)h+=`<div><p class="cap">${n}</p><div class="ph ${d=='C'?'B C':d} ${t.cls}">${DIRS[d].f[k](t)}</div></div>`;
+  h+='</div>';
+ }
+ document.getElementById('out').innerHTML=h;
+ document.getElementById('bar').innerHTML=Object.entries(TH).map(([k,v])=>`<button aria-pressed="${k===state.theme}" data-k="${k}">${v.label}</button>`).join('');
+ initParticles();
+}
+document.getElementById('bar').addEventListener('click',e=>{const k=e.target.dataset.k;if(k){state.theme=k;render()}});
+
+/* ---- particles: sign-in only, paused when hidden or offscreen, off for reduced motion ---- */
+const reduce=matchMedia('(prefers-reduced-motion: reduce)');
+let fields=[],raf=0,io;
+function initParticles(){
+ stop();if(io)io.disconnect();
+ fields=[...document.querySelectorAll('canvas.fx')].map(cv=>{
+  const r=cv.getBoundingClientRect(),dpr=Math.min(2,devicePixelRatio||1),ctx=cv.getContext('2d');
+  cv.width=r.width*dpr;cv.height=r.height*dpr;ctx.scale(dpr,dpr);
+  const ps=Array.from({length:34},()=>({x:Math.random()*r.width,y:Math.random()*r.height,r:.8+Math.random()*1.9,v:.10+Math.random()*.22,ph:Math.random()*6.28}));
+  return{cv,ctx,w:r.width,h:r.height,ps,col:getComputedStyle(cv).color,vis:true};
+ });
+ io=new IntersectionObserver(es=>{for(const e of es){const f=fields.find(f=>f.cv===e.target);if(f)f.vis=e.isIntersecting}start()});
+ fields.forEach(f=>io.observe(f.cv));
+ if(reduce.matches)clearAll();else{fields.forEach(f=>draw(f,0));start()}
+}
+function draw(f,t){const{ctx,w,h,ps,col}=f;ctx.clearRect(0,0,w,h);ctx.fillStyle=col;
+ for(const p of ps){if(t){p.y-=p.v;p.x+=Math.sin(t/2200+p.ph)*.12;if(p.y<-4){p.y=h+4;p.x=Math.random()*w}}
+  ctx.globalAlpha=.18+.32*(.5+.5*Math.sin(t/1100+p.ph));ctx.beginPath();ctx.arc(p.x,p.y,p.r,0,6.283);ctx.fill()}
+ ctx.globalAlpha=1}
+function loop(t){raf=0;let any=false;for(const f of fields)if(f.vis){draw(f,t);any=true}if(any)raf=requestAnimationFrame(loop)}
+function start(){if(reduce.matches||document.hidden||raf||!fields.some(f=>f.vis))return;raf=requestAnimationFrame(loop)}
+function stop(){cancelAnimationFrame(raf);raf=0}
+function clearAll(){fields.forEach(f=>f.ctx.clearRect(0,0,f.w,f.h))}
+document.addEventListener('visibilitychange',()=>document.hidden?stop():start());
+reduce.addEventListener('change',()=>{if(reduce.matches){stop();clearAll()}else start()});
+render();
+</script>
+</body>
+</html>

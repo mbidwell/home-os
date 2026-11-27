@@ -1,0 +1,15 @@
+# Private: never commit
+HOME-OS-SPEC.md
+chores-seed.csv
+costco-staples.csv
+*.csv
+
+# Local review output and tooling state
+review/
+tools/.chrome-profile/
+
+# OS
+.DS_Store
+
+# Local editor/agent config
+.claude/
