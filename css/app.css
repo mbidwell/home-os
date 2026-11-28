@@ -558,3 +558,8 @@ body.has-undo .cheer { bottom: calc(env(safe-area-inset-bottom) + 176px); }
 .moreh { display: block; margin: 8px auto 0; }
 .qa.slim .chips { margin: 6px 4px 4px; }
 .qa.slim .chip { background: var(--s2); color: var(--ink); border-color: transparent; }
+[data-act="calsync"] .v { display: inline-flex; align-items: center; gap: 6px; font-weight: 700; }
+[data-act="calsync"] .v svg.i { width: 18px; height: 18px; }
+[data-act="calsync"] .v .spin { width: 16px; height: 16px; border-radius: 50%; border: 2.5px solid var(--ink2); border-right-color: transparent; animation: spin .7s linear infinite; display: inline-block; }
+[data-act="calsync"].busy { pointer-events: none; }
+@media (prefers-reduced-motion: reduce) { [data-act="calsync"] .v .spin { animation-duration: 2s; } }

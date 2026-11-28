@@ -9,7 +9,7 @@ import * as C from './cheer.js';
 import * as A from './aisles.js';
 import * as R from './routines.js';
 
-const VERSION = '24';
+const VERSION = '25';
 const T = window.homeosTheme;
 const Q = new URLSearchParams(location.search);
 const PREVIEW = T.isPreview ? Q.get('preview') : null; // local screenshots only
@@ -1321,8 +1321,21 @@ async function kickCalendar(force = false) {
   lastKick = Date.now();
   try {
     const r = await fetch(`${FN_URL}${force ? '?force=1' : ''}`, { method: 'POST', headers: { apikey: window.HOMEOS_CONFIG.supabaseKey, 'Content-Type': 'application/json' }, body: '{}' });
-    if (r.ok) setTimeout(pull, 300);
-  } catch {}
+    const j = await r.json().catch(() => ({}));
+    if (r.ok) await pull();
+    return r.ok && j.ok !== false;
+  } catch { return false; }
+}
+// Settings "Sync now": spinner, then a check with the time (or a plain "Couldn't sync").
+async function syncNow() {
+  if (ui.calSyncing) return;
+  ui.calSyncing = 'busy'; render({ soft: true, keepFocus: '__none' });
+  const started = Date.now();
+  const ok = PREVIEW ? true : await kickCalendar(true);
+  await new Promise((r) => setTimeout(r, Math.max(0, 700 - (Date.now() - started)))); // long enough to see it
+  ui.calSyncing = ok ? 'ok' : 'err'; ui.calSyncedAt = new Date().toISOString();
+  render({ soft: true, keepFocus: '__none', fx: [['[data-act="calsync"] .v', 'pop']] });
+  setTimeout(() => { ui.calSyncing = null; render({ soft: true, keepFocus: '__none' }); }, 4000);
 }
 
 function timeline(date) {
@@ -1476,7 +1489,7 @@ function tomorrowHtml(td) {
   if (nowHM() < '19:00') return '';
   const tm = S.addDays(td, 1), st = statusOf(tm);
   const din = mealOf(M.slotOf(tm)), r = din && din.recipe_id ? findRow('recipes', din.recipe_id) : null;
-  const shift = calSync().setup ? `${mine() ? 'You' : esc(ownerName())}: ${esc(chipTextU(st))}` : '';
+  const shift = calSync().setup && mine() ? `You: ${esc(chipTextU(st))}` : '';
   const dinner = din ? `Dinner: ${esc(mealTitle(din))}${r && r.method ? ` · ${esc(M.methodLabel(r.method))}` : ''}` : 'No dinner planned yet';
   return `${sec('Tomorrow', shortDay(tm, { weekday: 'long' }))}<a class="card press rise d1" href="#/calendar"><div class="ic">${ic('cal')}</div><div><b>${shift || shortDay(tm, { weekday: 'long', month: 'short', day: 'numeric' })}</b><small>${dinner}</small></div></a>${tlHtml(tm, false)}`;
 }
@@ -1555,7 +1568,7 @@ function homeView() {
   <main>
     ${syncWarn()}
     ${setup}
-    ${shiftHero(td, !mine())}
+    ${mine() ? shiftHero(td) : ''}
     ${todoHtml(td)}
     ${tomorrowHtml(td)}
     ${headsUp(td)}
@@ -1888,7 +1901,7 @@ function settingsView() {
       <div class="fl">Shifts belong to<span class="seg sm"><button class="${calOwner() === myId() ? 'on' : ''}" data-act="calowner" data-v="me" aria-pressed="${calOwner() === myId()}">${esc(myName() || 'Me')}</button>${partnerId() ? `<button class="${calOwner() && calOwner() === partnerId() ? 'on' : ''}" data-act="calowner" data-v="partner" aria-pressed="${calOwner() === partnerId()}">${esc(userName(partnerId()))}</button>` : ''}</span></div>
       ${!mine() ? `<p class="hint" style="margin:0 0 12px">You see ${esc(ownerName())}’s calendar. The activation and union buttons are only on their phone.</p>` : ''}
       ${!mine() ? '' : calSync().setup ? calSync().rows.map((r) => `<div class="fl">${r.source === 'google' ? 'Google' : 'Outlook'}<span class="v">${r.last_error ? esc(r.last_error) : r.last_ok_at ? `Updated ${timeOf(r.last_ok_at)}` : 'Waiting'}</span></div>`).join('') : '<div class="fl">Not connected<span class="v">See README, step 10</span></div>'}
-      ${mine() ? `<button class="fl press" data-act="calsync">Sync now<span class="v">${ic('reset')}</span></button>
+      ${mine() ? `<button class="fl press${ui.calSyncing === 'busy' ? ' busy' : ''}" data-act="calsync" aria-live="polite">Sync now<span class="v">${ui.calSyncing === 'busy' ? '<i class="spin" aria-hidden="true"></i>Syncing' : ui.calSyncing === 'ok' ? `${ic('check')}Updated ${timeOf(ui.calSyncedAt)}` : ui.calSyncing === 'err' ? 'Couldn’t sync' : ic('reset')}</span></button>
       <a class="fl press" href="#/events">Event shifts<span class="v">${ic('chev')}</span></a>` : ''}
     </div>
     ${partnerId() ? `<p class="gt">Notes for ${esc(userName(partnerId()))}</p>
@@ -2403,7 +2416,7 @@ $app.addEventListener('click', (e) => {
     case 'ics': { const k = findRow('kid_items', id); if (k && k.starts_at) downloadIcs(k); ui.sheet = null; return soft(); }
     // event shifts
     case 'ecopy': copyShifts(t.dataset.m, t); return;
-    case 'calsync': kickCalendar(true); return soft([['[data-act="calsync"]', 'jelly']]);
+    case 'calsync': syncNow(); return;
     case 'resetweek': {
       if (t.classList.contains('ld')) return;
       t.classList.add('ld');
