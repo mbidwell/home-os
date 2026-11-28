@@ -1,0 +1,120 @@
+<!doctype html>
+<!-- Slice 5 mockups: meal planner, ingredients review, recipe, Copy for AI. Sample data only.
+     Open with ?theme=night|dim|blush|roast -->
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Mono:wght@400;500&family=Inter:wght@400;500;600;700&family=Nunito:wght@500;600;700;800&display=swap">
+<link rel="stylesheet" href="../../css/app.css">
+<style>
+html, body { overflow: auto; height: auto; background: #0b0d14; }
+.sheet-wrap { display: flex; gap: 28px; padding: 28px; align-items: flex-start; }
+.cap { font: 600 15px system-ui; color: #aab; margin: 0 0 10px 4px; }
+.phone { width: 393px; height: 852px; border-radius: 48px; overflow: hidden; position: relative; display: flex; flex-direction: column; background: var(--bg); color: var(--ink); font: 16px/1.4 var(--f-body); box-shadow: 0 0 0 10px #1a1c22; }
+.phone .hd { padding-top: 58px; }
+.phone .dockwrap { padding-bottom: 30px; }
+.phone main { overflow: hidden; }
+.seg span { flex: 1; height: 46px; border-radius: 14px; display: grid; place-items: center; font: 700 14px var(--f-body); color: var(--ink2); }
+.seg span.on { background: var(--ink); color: var(--bg); }
+/* planner */
+.wk { display: flex; justify-content: space-between; align-items: center; margin: 12px 4px 8px; font: 700 14px var(--f-body); color: var(--ink2); }
+.wk b { color: var(--ink); }
+.pday { display: flex; align-items: center; gap: 12px; min-height: 60px; }
+.pday + .pday { border-top: 1px solid var(--line); }
+.pday .d { width: 46px; flex: none; font: 700 13px var(--f-body); color: var(--ink2); line-height: 1.2; }
+.pday .d b { display: block; color: var(--ink); font-size: 15px; }
+.pday .m { flex: 1; font-weight: 600; }
+.pday .m small { display: block; font-weight: 500; font-size: 13px; color: var(--ink2); }
+.pday .empty2 { flex: 1; color: var(--ink2); font-weight: 600; }
+.pday.today .d b { text-decoration: underline; text-decoration-thickness: 2px; text-underline-offset: 3px; }
+.pill2 { font: 700 11px var(--f-body); padding: 3px 7px; border-radius: 7px; background: var(--s2); color: var(--ink2); margin-left: 6px; }
+.two { display: flex; gap: 8px; margin-top: 14px; }
+.two .pri, .two .ghost { height: 54px; font-size: 15px; display: flex; align-items: center; justify-content: center; gap: 8px; }
+.two .pri { flex: 1.3; } .two .ghost { flex: 1; }
+/* review sheet */
+.scrim { position: absolute; inset: 0; background: rgba(5,7,12,.5); z-index: 5; }
+.bs { position: absolute; left: 0; right: 0; bottom: 0; top: 110px; z-index: 6; background: var(--bg); border-radius: 30px 30px 0 0; padding: 10px 18px 30px; display: flex; flex-direction: column; }
+.bs .grab { width: 42px; height: 5px; border-radius: 9px; background: var(--line); margin: 0 auto 14px; }
+.bs h2 { font-size: var(--h2); margin: 0 4px 6px; }
+.bs .hint { margin: 0 6px 6px; font-size: 14px; color: var(--ink2); }
+.ing .have { font: 600 12.5px var(--f-body); color: var(--ok); }
+.bs .foot2 { margin-top: auto; padding-top: 10px; }
+.bs .foot2 .pri { height: 56px; display: flex; align-items: center; justify-content: center; gap: 8px; }
+/* recipe */
+.src { display: inline-flex; align-items: center; gap: 6px; font: 700 13px var(--f-body); color: var(--ink2); margin: 0 6px 10px; }
+.rlist { background: var(--s1); border-radius: 22px; box-shadow: var(--sh-soft); padding: 12px 16px; font-size: 15px; line-height: 1.6; }
+.rlist ul, .rlist ol { margin: 0; padding-left: 20px; }
+/* copy for AI */
+.prompt { background: var(--s1); border-radius: 22px; box-shadow: var(--sh-soft); padding: 14px 16px; font: 500 13.5px/1.55 var(--f-num); color: var(--ink2); white-space: pre-wrap; max-height: 360px; overflow: hidden; position: relative; }
+.prompt::after { content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 60px; background: linear-gradient(transparent, var(--s1)); }
+</style>
+</head>
+<body>
+<div class="sheet-wrap" id="w"></div>
+<script>
+var q = new URLSearchParams(location.search), t = q.get('theme') || 'night';
+var CLS = { night: 't-night', dim: 't-night t-dim', blush: 't-cozy t-blush', roast: 't-cozy t-roast' }[t];
+var I = {
+  home: '<path d="M3.5 11 12 3.8l8.5 7.2"/><path d="M5.5 9.6V20h13V9.6"/><path d="M10 20v-5.5h4V20"/>',
+  set: '<path d="M4 7h9M17 7h3M4 12h3M11 12h9M4 17h11M19 17h1"/><circle cx="15" cy="7" r="2"/><circle cx="9" cy="12" r="2"/><circle cx="17" cy="17" r="2"/>',
+  cart: '<path d="M3 4.5h2.4l2.1 10.2h10.4l2-7.4H6.6"/><circle cx="9.5" cy="19" r="1.4"/><circle cx="16.5" cy="19" r="1.4"/>',
+  box: '<rect x="4" y="3.5" width="16" height="17" rx="3"/><path d="M4 10h16M8 6.8v.4M8 13v3"/>',
+  chore: '<path d="M5 12.5 9 16.5 19 6.5"/><path d="M5 19.5h14"/>',
+  plus: '<path d="M12 5v14M5 12h14"/>', check: '<path d="M5 12.5 10 17.5 19 7"/>',
+  copy: '<rect x="8" y="8" width="12" height="12" rx="3"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/>',
+  link: '<path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1"/><path d="M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/>',
+  chev: '<path d="M9 5.5 15.5 12 9 18.5"/>'
+};
+function ic(k) { return '<svg class="i" viewBox="0 0 24 24" aria-hidden="true">' + I[k] + '</svg>'; }
+function hd(eb, title) { return '<header class="hd"><div class="top"><p class="eyebrow">' + eb + '</p><button class="sync s-ok"><i></i><span>Synced</span></button></div><h1>' + title + '</h1></header>'; }
+function dock(on) { var b = function (k, l, i) { return '<a class="' + (on === k ? 'on' : '') + '">' + ic(i) + l + '</a>'; }; return '<nav class="dockwrap"><div class="dock">' + b('home', 'Today', 'home') + b('grocery', 'Grocery', 'cart') + b('kitchen', 'Kitchen', 'box') + b('chores', 'Chores', 'chore') + b('settings', 'Settings', 'set') + '</div></nav>'; }
+function sec(a, b) { return '<div class="sec"><b>' + a + '</b><span>' + (b || '') + '</span></div>'; }
+function seg(on) { return '<div class="seg">' + ['Stock', 'Meals', 'Recipes'].map(function (x) { return '<span class="' + (x === on ? 'on' : '') + '">' + x + '</span>'; }).join('') + '</div>'; }
+function pd(dn, date, meal, sub, today, tag) { return '<div class="pday' + (today ? ' today' : '') + '"><span class="d"><b>' + dn + '</b>' + date + '</span>' + (meal ? '<span class="m">' + meal + (tag ? '<span class="pill2">' + tag + '</span>' : '') + (sub ? '<small>' + sub + '</small>' : '') + '</span>' : '<span class="empty2">+ Plan dinner</span>') + '</div>'; }
+
+var planner =
+  hd('5 of 7 dinners planned', 'Meals') +
+  '<main>' + seg('Meals') +
+    '<div class="wk"><span>‹ Last week</span><b>Nov 30 – Dec 6</b><span>Next ›</span></div>' +
+    '<div class="list">' +
+      pd('Mon', 'Nov 30', 'Chicken tacos', 'Recipe · 6 ingredients', true) +
+      pd('Tue', 'Dec 1', 'Leftovers', '', false, 'Free text') +
+      pd('Wed', 'Dec 2', 'Sheet pan salmon', 'Recipe · 5 ingredients') +
+      pd('Thu', 'Dec 3', '') +
+      pd('Fri', 'Dec 4', 'Pizza night', '', false, 'Free text') +
+      pd('Sat', 'Dec 5', 'Slow cooker chili', 'Recipe · 9 ingredients') +
+      pd('Sun', 'Dec 6', '') +
+    '</div>' +
+    '<div class="two"><button class="pri">' + ic('cart') + 'Ingredients to grocery</button><button class="ghost">' + ic('copy') + 'Copy for AI</button></div>' +
+  '</main>' + dock('kitchen');
+
+function ing(n, on, have) { return '<div class="it ing"><span class="cb' + (on ? ' on' : '') + '">' + (on ? ic('check') : '') + '</span><span class="nm">' + n + (have ? '<span class="have">Kitchen has it</span>' : '') + '</span></div>'; }
+var review =
+  hd('5 of 7 dinners planned', 'Meals') + '<main></main>' + dock('kitchen') +
+  '<div class="scrim"></div><div class="bs"><div class="grab"></div>' +
+  '<h2>Add to grocery</h2><p class="hint">From 3 recipes this week. Uncheck anything you already have.</p>' +
+  sec('Chicken tacos', '') + '<div class="list">' + ing('Chicken thighs', true) + ing('Tortillas', true) + ing('Shredded cheese', false, true) + ing('Limes', true) + '</div>' +
+  sec('Sheet pan salmon', '') + '<div class="list">' + ing('Salmon fillets', true) + ing('Olive oil', false, true) + ing('Lemons', true) + '</div>' +
+  '<div class="foot2"><button class="pri">' + ic('cart') + 'Add 6 to grocery</button></div></div>';
+
+var recipe =
+  hd('Recipe', 'Chicken tacos') +
+  '<main>' + '<span class="src">' + ic('link') + 'example.com/chicken-tacos</span>' +
+    sec('Ingredients', '6') + '<div class="rlist"><ul><li>1.5 lb chicken thighs</li><li>8 small tortillas</li><li>1 cup shredded cheese</li><li>2 limes</li><li>1 onion</li><li>Taco seasoning</li></ul></div>' +
+    sec('Steps', '') + '<div class="rlist"><ol><li>Season the chicken and sear 6 minutes a side.</li><li>Rest, then slice thin.</li><li>Warm tortillas; top with chicken, cheese, onion, and lime.</li></ol></div>' +
+    sec('Notes', '') + '<div class="rlist">Kids like it without onion.</div>' +
+  '</main>' + dock('kitchen');
+
+var ai =
+  hd('Ideas from what you have', 'Copy for AI') +
+  '<main>' +
+    '<p class="rs-sum" style="margin:0 6px 10px">Copies one message with your kitchen, recipes, and this week’s plan. Paste it into Claude or ChatGPT; save any idea you like as a recipe.</p>' +
+    '<div class="prompt">Help me plan dinners for Nov 30 – Dec 6 for two adults and two young kids.\n\nIn the kitchen now:\nFridge: shredded cheese, yogurt, butter (low)\nFreezer: chicken thighs, frozen peas\nPantry: rice, olive oil, taco seasoning\nOut: milk, eggs\n\nAlready planned: Mon chicken tacos, Tue leftovers, Wed sheet pan salmon, Fri pizza night, Sat slow cooker chili.\nOpen: Thu, Sun.\n\nOur saved recipes: chicken tacos, sheet pan salmon, slow cooker chili, …</div>' +
+    '<div class="two"><button class="pri">' + ic('copy') + 'Copy</button><button class="ghost">' + ic('plus') + 'Paste a recipe</button></div>' +
+  '</main>' + dock('kitchen');
+
+var W = document.getElementById('w');
+[['Meals (week)', planner], ['Ingredients review', review], ['Recipe', recipe], ['Copy for AI', ai]].forEach(function (p) {
+  W.insertAdjacentHTML('beforeend', '<div><p class="cap">' + p[0] + ' · ' + t + '</p><div class="phone ' + CLS + '">' + p[1] + '</div></div>');
+});
+</script>
+</body></html>

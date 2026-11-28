@@ -1,0 +1,160 @@
+<!doctype html>
+<!-- Slice 4 mockups: Today, Week, Kids, calendar warning. Sample data only (no real shifts, sites, or events).
+     Open with ?theme=night|dim|blush|roast -->
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Mono:wght@400;500&family=Inter:wght@400;500;600;700&family=Nunito:wght@500;600;700;800&display=swap">
+<link rel="stylesheet" href="../../css/app.css">
+<style>
+html, body { overflow: auto; height: auto; background: #0b0d14; }
+.sheet-wrap { display: flex; gap: 28px; padding: 28px; align-items: flex-start; }
+.cap { font: 600 15px system-ui; color: #aab; margin: 0 0 10px 4px; }
+.phone { width: 393px; height: 852px; border-radius: 48px; overflow: hidden; position: relative; display: flex; flex-direction: column; background: var(--bg); color: var(--ink); font: 16px/1.4 var(--f-body); box-shadow: 0 0 0 10px #1a1c22; }
+.phone .hd { padding-top: 58px; }
+.phone .dockwrap { padding-bottom: 30px; }
+.phone main { overflow: hidden; }
+
+/* shift hero */
+.hero.shift { padding: 18px 20px; border-radius: 26px; }
+.hero.shift h2 { margin: 0 0 4px; }
+.hero.shift p { margin: 0; font-size: 15px; }
+.hero.shift .row2 { display: flex; justify-content: space-between; align-items: flex-end; gap: 10px; }
+.hero.shift .big { font: 500 15px var(--f-num); color: var(--hero-ink2); }
+.tom { display: flex; gap: 8px; margin-top: 14px; padding-top: 12px; border-top: 1px solid color-mix(in srgb, var(--hero-ink) 14%, transparent); font-size: 14px; color: var(--hero-ink2); }
+.tom b { color: var(--hero-ink); }
+
+/* day blocks timeline */
+.tl { background: var(--s1); border-radius: 24px; box-shadow: var(--sh-soft); padding: 6px 14px; }
+.tl .r { min-height: 54px; display: flex; align-items: center; gap: 12px; }
+.tl .r + .r { border-top: 1px solid var(--line); }
+.tl .t { width: 74px; font: 500 14px var(--f-num); color: var(--ink2); flex: none; }
+.t-cozy .tl .t { font-family: var(--f-body); font-weight: 700; }
+.tl .w { flex: 1; font-weight: 600; }
+.tl .w small { display: block; font-weight: 500; font-size: 13px; color: var(--ink2); }
+.tl .now { position: relative; }
+.tl .now::before { content: ""; position: absolute; left: -14px; top: 12px; bottom: 12px; width: 3px; border-radius: 3px; background: var(--acc); }
+.mini { height: 38px; padding: 0 12px; border-radius: 12px; background: var(--s2); font: 700 13px var(--f-body); color: var(--ink); flex: none; }
+.ev .t { color: var(--ink); }
+.tag2 { font: 700 11px var(--f-body); padding: 3px 7px; border-radius: 7px; background: var(--s2); color: var(--ink2); margin-left: 6px; vertical-align: 1px; }
+.upd { text-align: center; font: 500 12.5px var(--f-num); color: var(--ink2); margin: 16px 0 4px; }
+
+/* week list */
+.seg3 { margin-bottom: 12px; }
+.day { background: var(--s1); border-radius: 22px; box-shadow: var(--sh-soft); padding: 12px 14px; margin-bottom: 8px; }
+.day .dh { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+.day .dn { font-weight: 700; }
+.day .dn small { font-weight: 500; color: var(--ink2); margin-left: 6px; font-size: 13px; }
+.sc { font: 700 12px var(--f-body); padding: 5px 9px; border-radius: 9px; background: var(--s2); color: var(--ink); white-space: nowrap; }
+.sc.work { background: var(--ink); color: var(--bg); }
+.sc.call { background: color-mix(in srgb, var(--acc) 30%, var(--s2)); }
+.sc.sleep, .sc.none { color: var(--ink2); }
+.sc.np { color: var(--ink2); border: 1.5px dashed var(--line); background: transparent; }
+.day .el { margin-top: 6px; font-size: 14px; color: var(--ink2); line-height: 1.6; }
+.day .el b { font: 500 13px var(--f-num); color: var(--ink2); margin-right: 6px; }
+.day.today { box-shadow: inset 0 0 0 2px var(--ink), var(--sh-soft); }
+
+/* kids */
+.appt .when { font: 500 13px var(--f-num); color: var(--ink2); display: block; }
+.cal { height: 40px; padding: 0 12px; border-radius: 12px; background: var(--s2); font: 700 12.5px var(--f-body); color: var(--ink); display: inline-flex; align-items: center; gap: 5px; flex: none; margin-right: 4px; }
+.cal svg.i { width: 16px; height: 16px; }
+.hlo { display: flex; background: var(--s2); border-radius: 14px; padding: 3px; gap: 3px; flex: none; }
+.hlo span { width: 46px; height: 40px; border-radius: 11px; display: grid; place-items: center; font: 700 12.5px var(--f-body); color: var(--ink2); }
+.hlo .h { background: var(--s1); color: var(--ink); } .hlo .l { background: color-mix(in srgb, var(--acc) 30%, var(--s1)); color: var(--ink); } .hlo .o { background: var(--ink); color: var(--bg); }
+
+/* warning (red is for errors only) */
+.warn { display: flex; gap: 10px; align-items: flex-start; padding: 12px 14px; border-radius: 18px; border: 1.5px solid color-mix(in srgb, var(--err) 55%, transparent); background: color-mix(in srgb, var(--err) 10%, var(--bg)); color: var(--ink); font-size: 14px; line-height: 1.4; margin-bottom: 12px; }
+.warn svg.i { color: var(--err); flex: none; margin-top: 1px; }
+.warn b { display: block; }
+.hero.shift.unknown h2 { opacity: .8; }
+</style>
+</head>
+<body>
+<div class="sheet-wrap" id="w"></div>
+<script>
+var q = new URLSearchParams(location.search), t = q.get('theme') || 'night';
+var CLS = { night: 't-night', dim: 't-night t-dim', blush: 't-cozy t-blush', roast: 't-cozy t-roast' }[t];
+var I = {
+  home: '<path d="M3.5 11 12 3.8l8.5 7.2"/><path d="M5.5 9.6V20h13V9.6"/><path d="M10 20v-5.5h4V20"/>',
+  set: '<path d="M4 7h9M17 7h3M4 12h3M11 12h9M4 17h11M19 17h1"/><circle cx="15" cy="7" r="2"/><circle cx="9" cy="12" r="2"/><circle cx="17" cy="17" r="2"/>',
+  cart: '<path d="M3 4.5h2.4l2.1 10.2h10.4l2-7.4H6.6"/><circle cx="9.5" cy="19" r="1.4"/><circle cx="16.5" cy="19" r="1.4"/>',
+  box: '<rect x="4" y="3.5" width="16" height="17" rx="3"/><path d="M4 10h16M8 6.8v.4M8 13v3"/>',
+  chore: '<path d="M5 12.5 9 16.5 19 6.5"/><path d="M5 19.5h14"/>',
+  cal: '<rect x="4" y="5" width="16" height="15" rx="3"/><path d="M4 10h16M9 3v4M15 3v4"/>',
+  plus: '<path d="M12 5v14M5 12h14"/>',
+  warn: '<path d="M12 4 21 19.5H3z"/><path d="M12 10v4.5M12 17v.1"/>',
+  chev: '<path d="M9 5.5 15.5 12 9 18.5"/>',
+  kid: '<circle cx="12" cy="7.5" r="3"/><path d="M6.5 20c.6-4 2.8-6 5.5-6s4.9 2 5.5 6"/>'
+};
+function ic(k) { return '<svg class="i" viewBox="0 0 24 24" aria-hidden="true">' + I[k] + '</svg>'; }
+function hd(eb, title) { return '<header class="hd"><div class="top"><p class="eyebrow">' + eb + '</p><button class="sync s-ok"><i></i><span>Synced</span></button></div><h1>' + title + '</h1></header>'; }
+function dock(on) {
+  var b = function (k, l, i) { return '<a class="' + (on === k ? 'on' : '') + '">' + ic(i) + l + '</a>'; };
+  return '<nav class="dockwrap"><div class="dock">' + b('home', 'Today', 'home') + b('grocery', 'Grocery', 'cart') + b('kitchen', 'Kitchen', 'box') + b('chores', 'Chores', 'chore') + b('settings', 'Settings', 'set') + '</div></nav>';
+}
+function sec(a, b) { return '<div class="sec"><b>' + a + '</b><span>' + (b || '') + '</span></div>'; }
+function r(time, what, sub, extra, cls) { return '<div class="r ' + (cls || '') + '"><span class="t">' + time + '</span><span class="w">' + what + (sub ? '<small>' + sub + '</small>' : '') + '</span>' + (extra || '') + '</div>'; }
+
+var today =
+  hd('Fri, Nov 27', 'Good morning, Sam') +
+  '<main>' +
+    '<div class="stack" style="margin:0 0 26px"><section class="hero shift"><p class="eyebrow">Your day</p>' +
+      '<div class="row2"><h2>Working</h2><span class="big">7 AM – 7 PM</span></div><p>North campus</p>' +
+      '<div class="tom"><span>Tomorrow</span><b>On call</b></div></section></div>' +
+    sec('Today', '') +
+    '<div class="tl">' +
+      r('9:00 AM', 'Work meeting', '30 min', '', 'ev') +
+      r('1–3 PM', 'Nap', '', '<button class="mini">Today 2–4</button>', 'now') +
+      r('4:30 PM', 'Pediatrician', 'Both kids', '', 'ev') +
+      r('6:00 PM', 'Dinner', '') +
+      r('8:00 PM', 'Bed', '') +
+    '</div>' +
+    sec('Baby', '') +
+    '<div class="tl">' + r('10:30 AM', 'Bottle', '') + r('3:00 PM', 'Bottle', '') + '</div>' +
+    '<a class="card" style="margin-top:14px"><div class="ic">' + ic('chore') + '</div><div><b>Chores</b><small>2 due today</small></div></a>' +
+  '</main>' + dock('home');
+
+function day(dn, date, chip, cls, evs, isToday) { return '<div class="day' + (isToday ? ' today' : '') + '"><div class="dh"><span class="dn">' + dn + '<small>' + date + '</small></span><span class="sc ' + cls + '">' + chip + '</span></div>' + (evs ? '<div class="el">' + evs + '</div>' : '') + '</div>'; }
+var week =
+  hd('Nov 27 – Dec 3', 'This week') +
+  '<main>' +
+    '<div class="seg seg3"><span>Today</span><span class="on">Week</span><span>Month</span></div>' +
+    day('Fri', 'Nov 27', 'Working 7a–7p', 'work', '<b>9:00</b>Work meeting<br><b>4:30</b>Pediatrician', true) +
+    day('Sat', 'Nov 28', 'On call', 'call', '') +
+    day('Sun', 'Nov 29', 'Working 7p–7a', 'work', '<b>Night</b>North campus') +
+    day('Mon', 'Nov 30', 'Sleeping until 2 PM', 'sleep', '<b>6:00</b>Soccer practice') +
+    day('Tue', 'Dec 1', 'No shift', 'none', '<b>10:00</b>Work meeting') +
+    day('Wed', 'Dec 2', 'Schedule not posted', 'np', '') +
+  '</main>' + dock('home');
+
+function sup(n, s, sub) { return '<div class="it"><span class="nm">' + n + (sub ? '<span class="onlist" style="margin-top:2px">' + sub + '</span>' : '') + '</span><span class="hlo"><span class="' + (s === 'h' ? 'h' : '') + '">Have</span><span class="' + (s === 'l' ? 'l' : '') + '">Low</span><span class="' + (s === 'o' ? 'o' : '') + '">Out</span></span></div>'; }
+var kids =
+  hd('Both kids', 'Kids') +
+  '<main>' +
+    '<div class="qa slim" style="margin-top:0"><div class="row"><div class="fld" style="display:flex;align-items:center">Add an appointment</div><button class="add">' + ic('plus') + '</button></div></div>' +
+    sec('Appointments', '2') +
+    '<div class="list">' +
+      '<div class="it appt"><span class="nm">Pediatrician<span class="when">Today · 4:30 PM</span></span><span class="cal">' + ic('cal') + 'Add</span></div>' +
+      '<div class="it appt"><span class="nm">Dentist checkup<span class="when">Dec 9 · 10:00 AM</span></span><span class="cal">' + ic('cal') + 'Add</span></div>' +
+    '</div>' +
+    sec('Supplies', '1 low') +
+    '<div class="list">' + sup('Diapers', 'l') + sup('Wipes', 'h') + sup('Formula', 'h') + sup('Kids’ Tylenol', 'o', '✓ On grocery') + '</div>' +
+  '</main>' + dock('home');
+
+var stale =
+  hd('Fri, Nov 27', 'Good morning, Sam') +
+  '<main>' +
+    '<div class="warn">' + ic('warn') + '<div><b>Calendar couldn’t update</b>Last updated 6 hours ago. Shifts may be out of date. Tap to try again.</div></div>' +
+    '<div class="stack" style="margin:0 0 26px"><section class="hero shift unknown"><p class="eyebrow">Your day · as of 2:10 AM</p>' +
+      '<div class="row2"><h2>Working</h2><span class="big">7 AM – 7 PM</span></div><p>North campus</p>' +
+      '<div class="tom"><span>Tomorrow</span><b>Schedule not posted</b></div></section></div>' +
+    sec('Today', '') +
+    '<div class="tl">' + r('1–3 PM', 'Nap', '', '<button class="mini">Today 2–4</button>') + r('6:00 PM', 'Dinner', '') + r('8:00 PM', 'Bed', '') + '</div>' +
+    '<p class="upd">Calendar updated 2:10 AM · Google ✓ · Outlook ✕</p>' +
+  '</main>' + dock('home');
+
+var W = document.getElementById('w');
+[['Today', today], ['Week', week], ['Kids', kids], ['Calendar warning', stale]].forEach(function (p) {
+  W.insertAdjacentHTML('beforeend', '<div><p class="cap">' + p[0] + ' · ' + t + '</p><div class="phone ' + CLS + '">' + p[1] + '</div></div>');
+});
+</script>
+</body></html>
