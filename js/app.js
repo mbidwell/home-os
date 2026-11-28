@@ -7,7 +7,7 @@ import * as M from './meals.js';
 import * as F from './fit.js';
 import * as C from './cheer.js';
 
-const VERSION = '20';
+const VERSION = '21';
 const T = window.homeosTheme;
 const Q = new URLSearchParams(location.search);
 const PREVIEW = T.isPreview ? Q.get('preview') : null; // local screenshots only
@@ -1406,6 +1406,12 @@ function todoHtml(td) {
   return `${sec('To do today', n)}<div class="list todo rise d1">${mine.map((c) => choreRow(c, td)).join('')}${myTasks.map((t) => taskRowToday(t, td)).join('')}</div>${foot ? `<p class="upd">${esc(foot)}</p>` : ''}`;
 }
 
+// Time-sensitive nudges, gathered into one slim list instead of a stack of big cards.
+function headsUp(td) {
+  const rows = [thawCard(td), shopCard(), planNextCard(td), resetCard()].filter(Boolean);
+  return rows.length ? `${sec('Heads up', rows.length)}<div class="list heads rise d1">${rows.join('')}</div>` : '';
+}
+
 function homeView() {
   const td = todayStr();
   const name = myName();
@@ -1425,11 +1431,10 @@ function homeView() {
     ${syncWarn()}
     ${setup}
     ${shiftHero(td, !mine())}
-    ${thawCard(td)}${shopCard()}${planNextCard(td)}
-    ${resetCard()}
     ${todoHtml(td)}
+    ${headsUp(td)}
     ${sec('Today')}${tlHtml(td, true)}
-    <div style="margin-top:14px">${todayCards(td)}</div>
+    <div class="tiles2 rise d2">${todayCards(td)}</div>
     <a class="more press" href="#/calendar">${ic('cal')}Week and month</a>
     ${calFooter()}
   </main>
