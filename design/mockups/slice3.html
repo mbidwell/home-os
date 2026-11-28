@@ -1,0 +1,160 @@
+<!doctype html>
+<!-- Slice 3 mockups: Chores, chore editor sheet, Tasks, Sunday reset. Sample data only (no real chores).
+     Open with ?theme=night|dim|blush|roast -->
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Mono:wght@400;500&family=Inter:wght@400;500;600;700&family=Nunito:wght@500;600;700;800&display=swap">
+<link rel="stylesheet" href="../../css/app.css">
+<style>
+html, body { overflow: auto; height: auto; background: #0b0d14; }
+.sheet-wrap { display: flex; gap: 28px; padding: 28px; align-items: flex-start; }
+.cap { font: 600 15px system-ui; color: #aab; margin: 0 0 10px 4px; }
+.phone { width: 393px; height: 852px; border-radius: 48px; overflow: hidden; position: relative; display: flex; flex-direction: column; background: var(--bg); color: var(--ink); font: 16px/1.4 var(--f-body); box-shadow: 0 0 0 10px #1a1c22; }
+.phone .hd { padding-top: 58px; }
+.phone .dockwrap { padding-bottom: 30px; }
+.phone .dock a { font-size: 11px; }
+.phone main { overflow: hidden; }
+
+/* filter chips */
+.fchips { display: flex; gap: 6px; margin: 12px 0 4px; }
+.fchip { height: 38px; padding: 0 14px; border-radius: 999px; border: 1.5px solid var(--line); font: 700 13px var(--f-body); color: var(--ink2); display: inline-flex; align-items: center; }
+.fchip.on { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+
+/* hero chore */
+.hero.chore { padding: 18px 20px; border-radius: 26px; }
+.hero.chore h2 { margin: 0 0 4px; }
+.hero.chore p { margin: 0 0 14px; font-size: 14.5px; }
+.hero.chore .acts { display: flex; gap: 8px; }
+.hero.chore .pri { flex: 1; height: 52px; font-size: 15px; display: flex; align-items: center; justify-content: center; gap: 8px; }
+.skipb { height: 52px; padding: 0 18px; border-radius: 18px; border: 1.5px solid color-mix(in srgb, var(--hero-ink) 22%, transparent); font: 700 15px var(--f-body); color: var(--hero-ink); }
+
+/* chore rows */
+.it .meta { display: block; font-weight: 500; font-size: 13px; color: var(--ink2); margin-top: 1px; }
+.it .meta b { font-weight: 700; color: var(--ink); }
+.late .meta b { color: var(--ink); text-decoration: underline; text-decoration-thickness: 2px; text-underline-offset: 3px; text-decoration-color: color-mix(in srgb, var(--ink) 35%, transparent); }
+.who { width: 30px; height: 30px; border-radius: 50%; background: var(--s2); display: grid; place-items: center; font: 700 12px var(--f-body); color: var(--ink2); flex: none; }
+.who.me { background: color-mix(in srgb, var(--acc) 28%, var(--s2)); color: var(--ink); }
+.qbtn { width: 40px; height: 40px; border-radius: 12px; display: grid; place-items: center; color: var(--ink2); flex: none; }
+.howto { margin: -4px 0 12px 44px; padding: 10px 12px; border-radius: 14px; background: var(--s2); font-size: 14px; line-height: 1.45; }
+.howto ol { margin: 0; padding-left: 18px; }
+.more { width: 100%; min-height: 52px; border-radius: 18px; border: 1.5px dashed var(--line); font: 700 14px var(--f-body); color: var(--ink2); margin-top: 8px; }
+
+/* editor sheet */
+.bs { top: 110px; }
+.bs .scroll { overflow: hidden; }
+.frow { min-height: 54px; display: flex; align-items: center; justify-content: space-between; gap: 10px; font-weight: 600; }
+.frow + .frow { border-top: 1px solid var(--line); }
+.frow .v { color: var(--ink2); font-weight: 600; }
+.seg.sm > * { height: 40px; font-size: 13px; }
+.months { display: grid; grid-template-columns: repeat(6, 1fr); gap: 6px; padding: 10px 0 12px; }
+.months span { height: 36px; border-radius: 10px; display: grid; place-items: center; font: 700 12.5px var(--f-body); color: var(--ink2); border: 1.5px solid var(--line); }
+.months span.on { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+.steps { padding: 8px 0 10px; font-size: 14.5px; line-height: 1.5; }
+.steps ol { margin: 0; padding-left: 20px; }
+.hist { font: 500 13px var(--f-num); color: var(--ink2); line-height: 1.8; padding: 8px 0 12px; }
+
+/* tasks */
+.flag { width: 40px; height: 40px; display: grid; place-items: center; color: var(--ink2); flex: none; }
+.flag.on { color: var(--ink); }
+.flag svg.i { width: 20px; height: 20px; }
+.flag.on svg.i { fill: currentColor; }
+
+/* sunday reset */
+.rs-sum { font-size: 15px; color: var(--ink2); line-height: 1.45; margin: 0 6px 6px; }
+.pill { font: 700 11.5px var(--f-body); padding: 3px 8px; border-radius: 8px; background: var(--s2); color: var(--ink2); flex: none; margin-right: 6px; }
+.bigbtn { position: absolute; left: 18px; right: 18px; bottom: 124px; z-index: 3; }
+.bigbtn .pri { height: 58px; font-size: 17px; display: flex; align-items: center; justify-content: center; gap: 8px; box-shadow: var(--sh); }
+</style>
+</head>
+<body>
+<div class="sheet-wrap" id="w"></div>
+<script>
+var q = new URLSearchParams(location.search), t = q.get('theme') || 'night';
+var CLS = { night: 't-night', dim: 't-night t-dim', blush: 't-cozy t-blush', roast: 't-cozy t-roast' }[t];
+var cozy = t === 'blush' || t === 'roast';
+var I = {
+  home: '<path d="M3.5 11 12 3.8l8.5 7.2"/><path d="M5.5 9.6V20h13V9.6"/><path d="M10 20v-5.5h4V20"/>',
+  set: '<path d="M4 7h9M17 7h3M4 12h3M11 12h9M4 17h11M19 17h1"/><circle cx="15" cy="7" r="2"/><circle cx="9" cy="12" r="2"/><circle cx="17" cy="17" r="2"/>',
+  cart: '<path d="M3 4.5h2.4l2.1 10.2h10.4l2-7.4H6.6"/><circle cx="9.5" cy="19" r="1.4"/><circle cx="16.5" cy="19" r="1.4"/>',
+  box: '<rect x="4" y="3.5" width="16" height="17" rx="3"/><path d="M4 10h16M8 6.8v.4M8 13v3"/>',
+  chore: '<path d="M5 12.5 9 16.5 19 6.5"/><path d="M5 19.5h14"/>',
+  plus: '<path d="M12 5v14M5 12h14"/>',
+  check: '<path d="M5 12.5 10 17.5 19 7"/>',
+  q: '<circle cx="12" cy="12" r="8.5"/><path d="M9.8 9.6a2.3 2.3 0 0 1 4.4.9c0 1.6-2.2 2-2.2 3.4M12 16.8v.1"/>',
+  flag: '<path d="M6 20.5V4.5M6 5h10.5l-2 3.8 2 3.8H6"/>',
+  reset: '<path d="M4.5 12a7.5 7.5 0 1 0 2.2-5.3L4.5 9"/><path d="M4.5 4.5V9H9"/>',
+  chev: '<path d="M9 5.5 15.5 12 9 18.5"/>'
+};
+function ic(k) { return '<svg class="i" viewBox="0 0 24 24" aria-hidden="true">' + I[k] + '</svg>'; }
+function hd(eb, title, badge) { return '<header class="hd"><div class="top"><p class="eyebrow">' + eb + '</p>' + (badge || '<button class="sync s-ok"><i></i><span>Synced</span></button>') + '</div><h1>' + title + '</h1></header>'; }
+function dock(on) {
+  var b = function (k, l, i) { return '<a class="' + (on === k ? 'on' : '') + '">' + ic(i) + l + '</a>'; };
+  return '<nav class="dockwrap"><div class="dock">' + b('home', 'Home', 'home') + b('grocery', 'Grocery', 'cart') + b('kitchen', 'Kitchen', 'box') + b('chores', 'Chores', 'chore') + b('settings', 'Settings', 'set') + '</div></nav>';
+}
+function cb(on) { return '<span class="cb' + (on ? ' on' : '') + '">' + (on ? ic('check') : '') + '</span>'; }
+function sec(a, b) { return '<div class="sec"><b>' + a + '</b><span>' + (b || '') + '</span></div>'; }
+function who(w) { return '<span class="who' + (w === 'S' ? ' me' : '') + '">' + w + '</span>'; }
+function chore(name, meta, w, opts) { opts = opts || {}; return '<div class="it' + (opts.late ? ' late' : '') + '">' + cb() + '<span class="nm">' + name + '<span class="meta">' + meta + '</span></span>' + (opts.q ? '<span class="qbtn">' + ic('q') + '</span>' : '') + who(w) + '</div>' + (opts.open ? '<div class="howto"><ol><li>Turn off the unit at the switch.</li><li>Slide the old filter out; note the arrow.</li><li>Slide the new one in, arrow toward the unit.</li></ol></div>' : ''); }
+
+var chores =
+  hd('3 overdue · 5 this week', 'Chores') +
+  '<main>' +
+    '<div class="seg"><span class="on">Chores</span><span>Tasks</span></div>' +
+    '<div class="fchips"><span class="fchip on">Everyone</span><span class="fchip">Sam</span><span class="fchip">Riley</span><span class="fchip">Either</span></div>' +
+    '<div class="stack" style="margin:12px 0 26px"><section class="hero chore"><p class="eyebrow">Overdue · 2 days</p><h2>Wipe down the fridge</h2><p>Every 2 weeks · Either</p>' +
+      '<div class="acts"><button class="pri">' + ic('check') + 'Done</button><button class="skipb">Skip</button></div></section></div>' +
+    sec('Overdue', '2 more') +
+    '<div class="list">' + chore('Change the air filter', '<b>Due Sat</b> · monthly, week 4', 'S', { late: true, q: true, open: true }) + chore('Water the plants', '<b>Due yesterday</b> · every 3 days', 'E', { late: true }) + '</div>' +
+    sec('This week', '5') +
+    '<div class="list">' + chore('Take out recycling', '<b>Tue</b> · every 2 weeks', 'R') + chore('Clean the bathrooms', '<b>Thu</b> · weekly, after done', 'E') + chore('Wash the bedding', '<b>Sat</b> · weekly', 'E') + '</div>' +
+  '</main>' + dock('chores');
+
+var editor =
+  hd('3 overdue · 5 this week', 'Chores') + '<main></main>' + dock('chores') +
+  '<div class="scrim"></div><div class="bs"><div class="grab"></div>' +
+  '<h2>Change the air filter<a class="lnk">Done</a></h2>' +
+  '<div class="scroll">' +
+    '<div class="list" style="padding:2px 14px">' +
+      '<div class="frow">Who<div class="seg sm" style="width:210px"><span class="on">Sam</span><span>Riley</span><span>Either</span></div></div>' +
+      '<div class="frow">Next due<span class="v">Sat, Nov 28</span></div>' +
+      '<div class="frow">Repeats<span class="v">Monthly, week 4 ' + ic('chev') + '</span></div>' +
+      '<div class="frow">Count from<div class="seg sm" style="width:210px"><span>Last done</span><span class="on">Schedule</span></div></div>' +
+    '</div>' +
+    sec('Only in these months', 'All year') +
+    '<div class="months">' + ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'].map(function (m) { return '<span class="on">' + m + '</span>'; }).join('') + '</div>' +
+    sec('How-to', 'Edit') +
+    '<div class="list" style="padding:2px 14px"><div class="steps"><ol><li>Turn off the unit at the switch.</li><li>Slide the old filter out; note the arrow.</li><li>Slide the new one in, arrow toward the unit.</li></ol></div></div>' +
+    sec('History', '') +
+    '<div class="hist">Oct 24 · done by Sam<br>Sep 26 · skipped<br>Aug 22 · done by Riley</div>' +
+  '</div></div>';
+
+function task(name, cat, flag, done) { return '<div class="it' + (done ? ' done' : '') + '">' + cb(done) + '<span class="nm">' + name + (cat ? '<span class="meta">' + cat + '</span>' : '') + '</span><span class="flag' + (flag ? ' on' : '') + '">' + ic('flag') + '</span></div>'; }
+var tasks =
+  hd('6 open · 2 flagged', 'Tasks') +
+  '<main>' +
+    '<div class="seg"><span>Chores</span><span class="on">Tasks</span></div>' +
+    '<div class="qa" style="margin-top:12px"><div class="row"><div class="fld" style="display:flex;align-items:center">' + (cozy ? 'What needs doing?' : 'Add a task') + '</div><button class="add">' + ic('plus') + '</button></div>' +
+    '<div class="chips"><span class="chip" style="background:color-mix(in srgb, var(--hero-ink) 12%, transparent)">House</span><span class="chip">Kids</span><span class="chip">Errands</span><span class="chip">' + ic('plus') + 'List</span></div></div>' +
+    sec('House', '3') + '<div class="list">' + task('Fix the squeaky door', 'Due Sun', true) + task('Call about the gutters', '', true) + task('Hang the hallway shelf', '') + '</div>' +
+    sec('Kids', '2') + '<div class="list">' + task('Sign the field trip form', 'Due Mon', false) + task('Order winter boots', '') + '</div>' +
+    sec('Errands', '1') + '<div class="list">' + task('Return the library books', 'Due Wed') + '</div>' +
+  '</main>' + dock('chores');
+
+function miss(name, meta, pill) { return '<div class="it">' + '<span class="pill">' + pill + '</span><span class="nm">' + name + '<span class="meta">' + meta + '</span></span></div>'; }
+var reset =
+  hd('Sunday, Nov 29', 'Sunday reset') +
+  '<main>' +
+    '<p class="rs-sum">4 things were missed this week. Weekly ones start fresh; the rest stay until they’re done.</p>' +
+    sec('Starts fresh', '3') +
+    '<div class="list">' + miss('Wash the bedding', 'Was due Sat · next Sat', 'Weekly') + miss('Water the plants', 'Was due Thu · next Wed', 'Every 3 days') + miss('Take out recycling', 'Was due Tue · next Tue', 'Every 2 wks') + '</div>' +
+    sec('Stays until done', '1') +
+    '<div class="list">' + miss('Change the air filter', 'Was due Sat · still due', 'Monthly') + '</div>' +
+  '</main>' +
+  '<div class="bigbtn"><button class="pri">' + ic('reset') + 'Reset week</button></div>' + dock('chores');
+
+var W = document.getElementById('w');
+[['Chores', chores], ['Chore editor', editor], ['Tasks', tasks], ['Sunday reset', reset]].forEach(function (p) {
+  W.insertAdjacentHTML('beforeend', '<div><p class="cap">' + p[0] + ' · ' + t + '</p><div class="phone ' + CLS + '">' + p[1] + '</div></div>');
+});
+</script>
+</body></html>
