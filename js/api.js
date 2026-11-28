@@ -59,10 +59,16 @@ export function refresh() {
   if (!session) return Promise.reject(new ApiError('Signed out', { signedOut: true }));
   if (!refreshing) {
     refreshing = (async () => {
+      // Another tab (or Safari next to the installed app) may have refreshed already. Supabase rotates
+      // refresh tokens, so reusing the old one would end the session: pick up the newer one instead.
+      const stored = load();
+      if (stored && stored.refresh_token !== session.refresh_token && stored.expires_at - 60 > Date.now() / 1000) { session = stored; refreshing = null; return session; }
       try {
         save(fromToken(await auth('token?grant_type=refresh_token', { refresh_token: session.refresh_token })));
         return session;
       } catch (e) {
+        const again = load();
+        if (again && again.refresh_token !== session.refresh_token) { session = again; return session; } // lost a race, not signed out
         // A rejected refresh token means signed out. Network trouble keeps the session.
         if (e.status === 400 || e.status === 401 || e.status === 403) {
           save(null);
@@ -77,7 +83,11 @@ export function refresh() {
 
 async function token() {
   if (!session) throw new ApiError('Signed out', { signedOut: true });
-  if (session.expires_at - 60 < Date.now() / 1000) await refresh();
+  if (session.expires_at - 60 < Date.now() / 1000) {
+    const stored = load();
+    if (stored && stored.access_token !== session.access_token && stored.expires_at - 60 > Date.now() / 1000) session = stored;
+    else await refresh();
+  }
   return session.access_token;
 }
 
