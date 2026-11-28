@@ -17,12 +17,15 @@ This repo is a template: it holds no names, addresses, chores, or calendar data.
 
 8. **Costco list (optional).** In the app, Settings > Lists > Import Costco list, and pick a CSV with columns `name, category, store, good_to_freeze`. Categories Fridge, Freezer, Pantry, Household, and Kids group the list; anything else goes under Other. Keep the CSV out of the repo.
 
+9. **Chores (optional).** Settings > Lists > Import chores, with a CSV of columns `name, group, repeat_mode (fixed | after_completion | once), every, unit (day | week | month | year), week_of_month (1-4), months (Mar;Jun), day (Tue), owner (Me | Either), active (yes | no), notes, howto, start_date`. "Me" means whoever imports. Rows with `once` become priority tasks. Keep the CSV out of the repo.
+
 ## Notes
 
 - Theme is stored per phone. Night Shift dims to amber from 10 PM to 6 AM (toggle in Settings).
 - Every storage key and cache name starts with `homeos-`, and the service worker deletes only its own caches, so other apps on the same GitHub Pages origin are left alone.
 - Bump `VERSION` in `sw.js` on every release.
 - Layout readout for debugging: tap "Version" in Settings five times.
+- Chore repeat rules live in `js/schedule.js`. Tests: `node --test tests/schedule.test.mjs` (no install needed).
 
 ## Local preview
 

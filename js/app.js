@@ -1,14 +1,20 @@
 import * as api from './api.js';
 import { startParticles } from './particles.js';
 import { startRealtime } from './realtime.js';
+import * as S from './schedule.js';
 
-const VERSION = '2';
+const VERSION = '3';
 const T = window.homeosTheme;
 const Q = new URLSearchParams(location.search);
 const PREVIEW = T.isPreview ? Q.get('preview') : null; // local screenshots only
 const $app = document.getElementById('app');
-const K = { profiles: 'homeos-profiles', queue: 'homeos-queue', rows: 'homeos-rows', loc: 'homeos-kitchen-loc', later: 'homeos-partner-later', stores: 'homeos-store-memory', debug: 'homeos-debug' };
-const TABLES = ['grocery_items', 'staples', 'pantry_items'];
+const K = { profiles: 'homeos-profiles', queue: 'homeos-queue', rows: 'homeos-rows', loc: 'homeos-kitchen-loc', later: 'homeos-partner-later', stores: 'homeos-store-memory', choreTab: 'homeos-chore-tab', lists: 'homeos-task-lists', who: 'homeos-chore-who', debug: 'homeos-debug' };
+const TABLES = ['grocery_items', 'staples', 'pantry_items', 'tasks', 'task_events'];
+// What each table pulls. History (task_events) is add-only: the most recent stretch is enough on a phone.
+const TABLE_Q = {
+  task_events: 'task_events?select=*&order=at.desc&limit=800'
+};
+const tableQuery = (t) => TABLE_Q[t] || `${t}?select=*&deleted_at=is.null&order=created_at.asc`;
 
 const ls = {
   get(k, d) { try { const v = localStorage.getItem(k); return v == null ? d : JSON.parse(v); } catch { return d; } },
@@ -16,12 +22,13 @@ const ls = {
   del(k) { try { localStorage.removeItem(k); } catch {} }
 };
 
-const emptyRows = () => ({ grocery_items: [], staples: [], pantry_items: [] });
+const emptyRows = () => ({ grocery_items: [], staples: [], pantry_items: [], tasks: [], task_events: [] });
 const state = {
   profiles: ls.get(K.profiles, []),
   rows: { ...emptyRows(), ...ls.get(K.rows, {}) },
   queue: ls.get(K.queue, []),
   storeMemory: ls.get(K.stores, {}), // item name -> store it was last bought at
+  members: [], // household user IDs (so a chore can be assigned before the partner signs in)
   member: true,
   fetched: false,
   flushing: false,
@@ -29,7 +36,7 @@ const state = {
   error: null
 };
 // Screen-only state (not synced).
-const ui = { sheet: null, edit: false, newGroup: null, loc: ls.get(K.loc, 'fridge') };
+const ui = { sheet: null, edit: false, newGroup: null, loc: ls.get(K.loc, 'fridge'), choreTab: ls.get(K.choreTab, 'chores'), who: ls.get(K.who, 'all'), showLater: false, showDone: false, howto: null, taskCat: 'House', resetCount: null };
 
 /* ---------- constants ---------- */
 const STORES = [['costco', 'Costco'], ['wegmans', 'Wegmans'], ['publix', 'Publix'], ['harris_teeter', 'Harris Teeter']];
@@ -67,6 +74,31 @@ if (PREVIEW) {
       r('Yogurt', { location: 'fridge', status: 'have' }), r('Hot sauce', { location: 'fridge', status: 'have' }),
       r('Frozen peas', { location: 'freezer', status: 'have' }), r('Rice', { location: 'pantry', status: 'low' })]
   };
+  const today = S.localToday(T.now());
+  const ch = (title, o) => ({ id: 'c' + Math.random().toString(36).slice(2), kind: 'chore', title, active: true, repeat_mode: 'after', every: 1, unit: 'week', week_of_month: null, weekday: null, months: null, assignee: null, priority: false, howto: null, ...o });
+  const filt = ch('Change the air filter', { repeat_mode: 'fixed', unit: 'month', week_of_month: 4, assignee: 'me', due_date: S.addDays(today, -6), howto: 'Turn off the unit at the switch.\nSlide the old filter out; note the arrow.\nSlide the new one in, arrow toward the unit.' });
+  state.rows.tasks = [
+    ch('Wipe down the fridge', { every: 2, due_date: S.addDays(today, -2) }), filt,
+    ch('Water the plants', { every: 3, unit: 'day', due_date: S.addDays(today, -1) }),
+    ch('Take out recycling', { repeat_mode: 'fixed', every: 2, weekday: 2, assignee: 'p', due_date: S.addDays(today, 2) }),
+    ch('Clean the bathrooms', { due_date: S.addDays(today, 4) }), ch('Wash the bedding', { due_date: S.addDays(today, 5) }),
+    ch('Clean the gutters', { repeat_mode: 'fixed', every: 6, unit: 'month', week_of_month: 2, months: [4, 10], due_date: S.addDays(today, 60) }),
+    ch('Test smoke alarms', { repeat_mode: 'fixed', every: 3, unit: 'month', week_of_month: 1, months: [3, 6, 9, 12], due_date: S.addDays(today, 25) }),
+    { id: 't1', kind: 'task', title: 'Fix the squeaky door', category: 'House', priority: true, due_date: S.addDays(today, 2), active: true, repeat_mode: 'once' },
+    { id: 't2', kind: 'task', title: 'Call about the gutters', category: 'House', priority: true, active: true, repeat_mode: 'once' },
+    { id: 't3', kind: 'task', title: 'Hang the hallway shelf', category: 'House', active: true, repeat_mode: 'once' },
+    { id: 't4', kind: 'task', title: 'Sign the field trip form', category: 'Kids', due_date: S.addDays(today, 3), active: true, repeat_mode: 'once' },
+    { id: 't5', kind: 'task', title: 'Order winter boots', category: 'Kids', active: true, repeat_mode: 'once' },
+    { id: 't6', kind: 'task', title: 'Return the library books', category: 'Errands', due_date: S.addDays(today, 5), active: true, repeat_mode: 'once' }
+  ];
+  state.rows.task_events = [
+    { id: 'e1', task_id: filt.id, kind: 'done', due_date: S.addDays(today, -34), at: S.addDays(today, -34) + 'T15:00:00Z', by_user: 'me' },
+    { id: 'e2', task_id: filt.id, kind: 'skip', due_date: S.addDays(today, -62), at: S.addDays(today, -62) + 'T15:00:00Z', by_user: 'me' }
+  ];
+  state.members = ['me', 'p'];
+  if (Q.get('tab')) ui.choreTab = Q.get('tab');
+  if (Q.get('howto')) ui.howto = filt.id;
+  if (Q.get('edit')) ui.sheet = { type: 'chore', id: filt.id };
   if (Q.get('sheet')) ui.sheet = { type: 'addfrom', tab: Q.get('sheet') };
   if (Q.get('preview') === 'kitchen') state.rows.grocery_items = state.rows.grocery_items.filter((g) => g.name !== 'Eggs');
 }
@@ -87,7 +119,11 @@ const I = {
   plus: '<path d="M12 5v14M5 12h14"/>',
   star: '<path d="m12 4 2.4 5 5.4.6-4 3.7 1.1 5.3L12 16l-4.9 2.6 1.1-5.3-4-3.7 5.4-.6z"/>',
   bag: '<path d="M5.5 8h13l-1 12h-11z"/><path d="M9 8V6.5a3 3 0 0 1 6 0V8"/>',
-  x: '<path d="M6.5 6.5l11 11M17.5 6.5l-11 11"/>'
+  x: '<path d="M6.5 6.5l11 11M17.5 6.5l-11 11"/>',
+  chore: '<path d="M5 12.5 9 16.5 19 6.5"/><path d="M5 19.5h14"/>',
+  q: '<circle cx="12" cy="12" r="8.5"/><path d="M9.8 9.6a2.3 2.3 0 0 1 4.4.9c0 1.6-2.2 2-2.2 3.4M12 16.8v.1"/>',
+  flag: '<path d="M6 20.5V4.5M6 5h10.5l-2 3.8 2 3.8H6"/>',
+  reset: '<path d="M4.5 12a7.5 7.5 0 1 0 2.2-5.3L4.5 9"/><path d="M4.5 4.5V9H9"/>'
 };
 const ic = (k, c = 'i') => `<svg class="${c}" viewBox="0 0 24 24" aria-hidden="true">${I[k]}</svg>`;
 const uid = () => (crypto.randomUUID ? crypto.randomUUID() : 'xxxxxxxx-xxxx-4xxx-8xxx-xxxxxxxxxxxx'.replace(/x/g, () => ((Math.random() * 16) | 0).toString(16)));
@@ -150,12 +186,12 @@ function updateBadge() { document.querySelectorAll('[data-act="sync"]').forEach(
 function saveRows() { ls.set(K.rows, state.rows); }
 function saveQueue() { ls.set(K.queue, state.queue); }
 
-function insertRow(table, data) {
+function insertRow(table, data, { conflict = null } = {}) {
   const now = new Date().toISOString();
   const row = { id: uid(), created_at: now, updated_at: now, ...data };
   state.rows[table].push(row);
   saveRows();
-  if (!PREVIEW) { state.queue.push({ kind: 'row', op: 'insert', table, id: row.id, data: row }); saveQueue(); flush(); }
+  if (!PREVIEW) { state.queue.push({ kind: 'row', op: 'insert', table, id: row.id, data: row, conflict }); saveQueue(); flush(); }
   return row;
 }
 
@@ -184,6 +220,7 @@ async function pull() {
     try {
       const members = await api.rest('household_members?select=user_id');
       state.member = !!members && members.some((m) => m.user_id === myId());
+      state.members = (members || []).map((m) => m.user_id);
       if (!state.member) {
         state.error = "This account isn't in the household yet. Add its user ID to household_members (README, step 4).";
       } else {
@@ -191,7 +228,7 @@ async function pull() {
           api.rest('profiles?select=user_id,display_name,updated_at&deleted_at=is.null'),
           // Where each item was bought before, including cleared ones: new adds go to that store.
           api.rest('grocery_items?select=name,store&store=not.is.null&order=updated_at.desc&limit=500'),
-          ...TABLES.map((t) => api.rest(`${t}?select=*&deleted_at=is.null&order=created_at.asc`))
+          ...TABLES.map((t) => api.rest(tableQuery(t)))
         ]);
         const mem = {};
         for (const h of history) if (!(norm(h.name) in mem)) mem[norm(h.name)] = h.store;
@@ -252,7 +289,9 @@ async function flush() {
           if (rows && rows[0]) upsertProfile(rows[0]);
         } else if (op.op === 'insert') {
           const { created_at, updated_at, ...body } = op.data; // server sets the clocks
-          await api.rest(`${op.table}?on_conflict=id`, { method: 'POST', prefer: 'resolution=merge-duplicates,return=minimal', body });
+          if (op.table === 'task_events') { delete body.created_at; }
+          // A conflict target means "record once": the other phone may already have written it.
+          await api.rest(`${op.table}?on_conflict=${op.conflict || 'id'}`, { method: 'POST', prefer: `resolution=${op.conflict ? 'ignore' : 'merge'}-duplicates,return=minimal`, body });
           justSaved.set(op.id, { table: op.table, data: op.data, until: Date.now() + 15000 });
         } else {
           const { updated_at, ...body } = op.data;
@@ -380,7 +419,20 @@ function header(eyebrow, title) {
 
 function dock(on) {
   const b = (k, label, icon) => `<a class="press${on === k ? ' on' : ''}" href="#/${k}" ${on === k ? 'aria-current="page"' : ''}>${ic(icon)}${label}</a>`;
-  return `<nav class="dockwrap" aria-label="Main"><div class="dock">${b('home', 'Home', 'home')}${b('grocery', 'Grocery', 'cart')}${b('kitchen', 'Kitchen', 'box')}${b('settings', 'Settings', 'set')}</div></nav>`;
+  return `<nav class="dockwrap" aria-label="Main"><div class="dock">${b('home', 'Home', 'home')}${b('grocery', 'Grocery', 'cart')}${b('kitchen', 'Kitchen', 'box')}${b('chores', 'Chores', 'chore')}${b('settings', 'Settings', 'set')}</div></nav>`;
+}
+
+function choreLine() {
+  const today = todayStr();
+  const act = choresAll().filter((c) => c.active && c.due_date);
+  const o = act.filter((c) => S.isOverdue(c, today)).length, d = act.filter((c) => c.due_date === today).length;
+  return [o && `${o} overdue`, d && `${d} due today`].filter(Boolean).join(', ');
+}
+function resetCard() {
+  const today = todayStr();
+  if (S.weekdayOf(today) !== 0) return '';
+  const n = missed(today).filter(S.resetsWeekly).length;
+  return n ? `<a class="card press rise d1" href="#/reset"><div class="ic">${ic('reset')}</div><div><b>Sunday reset</b><small>${plural(n, 'chore')} to start fresh</small></div></a>` : '';
 }
 
 function homeView() {
@@ -408,6 +460,8 @@ function homeView() {
   <main>
     ${hero}
     ${toGet ? `<a class="card press rise d1" href="#/grocery"><div class="ic">${ic('cart')}</div><div><b>Grocery</b><small>${plural(toGet, 'thing')} to get</small></div></a>` : ''}
+    ${resetCard()}
+    ${choreLine() ? `<a class="card press rise d1" href="#/chores"><div class="ic">${ic('chore')}</div><div><b>Chores</b><small>${choreLine()}</small></div></a>` : ''}
     ${kitchenLine ? `<a class="card press rise d1" href="#/kitchen"><div class="ic">${ic('box')}</div><div><b>Kitchen</b><small>${kitchenLine}</small></div></a>` : ''}
     <a class="card press rise d2" href="#/settings"><div class="ic">${ic('ppl')}</div><div><b>Household</b><small>${house}</small></div></a>
     <a class="card press rise d2" href="#/settings"><div class="ic">${ic(th.theme === 'night' ? 'moon' : 'sun')}</div><div><b>This phone</b><small>${phoneLine(th)}</small></div></a>
@@ -486,6 +540,204 @@ function kitchenView() {
   ${dock('kitchen')}`;
 }
 
+/* --- chores and tasks --- */
+const todayStr = () => S.localToday(T.now());
+const choresAll = () => live('tasks').filter((t) => t.kind === 'chore');
+const tasksAll = () => live('tasks').filter((t) => t.kind === 'task');
+const partnerId = () => state.members.find((id) => id !== myId()) || partner()?.user_id || null;
+const userName = (id) => { const n = (profileOf(id)?.display_name || '').trim(); return n || (id === myId() ? 'You' : 'Partner'); };
+const whoKey = (t) => (!t.assignee ? 'either' : t.assignee === myId() ? 'me' : 'partner');
+const whoInitial = (t) => (!t.assignee ? 'E' : (userName(t.assignee)[0] || '?').toUpperCase());
+const whoLine = (t) => (!t.assignee ? 'Either' : userName(t.assignee));
+const passWho = (t) => ui.who === 'all' || whoKey(t) === ui.who;
+const missed = (today) => choresAll().filter((c) => c.active && S.isOverdue(c, today));
+const TASK_LISTS = ['House', 'Kids', 'Errands'];
+const taskLists = () => [...new Set([...TASK_LISTS, ...tasksAll().map((t) => t.category).filter(Boolean), ...ls.get(K.lists, [])])];
+const eventsOf = (id) => live('task_events').filter((e) => e.task_id === id).sort((a, b) => String(b.at).localeCompare(String(a.at)));
+
+function recordEvent(t, kind, due) {
+  insertRow('task_events', { task_id: t.id, kind, due_date: due, at: new Date().toISOString(), by_user: myId() }, { conflict: 'task_id,kind,due_date' });
+}
+
+// Done or skip closes the open instance and schedules the next one. One open instance per chore, never a stack.
+function closeChore(c, kind) {
+  const today = todayStr();
+  if (c.kind === 'task' || c.repeat_mode === 'once') {
+    if (kind === 'done') { recordEvent(c, 'done', c.due_date || today); updateRow('tasks', c.id, { done_at: new Date().toISOString() }); }
+    return;
+  }
+  recordEvent(c, kind, c.due_date || today);
+  updateRow('tasks', c.id, { due_date: S.nextDue(c, today) });
+}
+
+// Sunday reset: frequent misses start fresh; monthly-or-longer ones and tasks stay until done. History is kept.
+function resetWeek() {
+  const today = todayStr();
+  let n = 0;
+  for (const c of missed(today)) {
+    if (!S.resetsWeekly(c)) continue;
+    const next = S.resetDue(c, today);
+    if (next && next !== c.due_date) { recordEvent(c, 'reset', c.due_date); updateRow('tasks', c.id, { due_date: next }); n++; }
+  }
+  return n;
+}
+
+function newChore() {
+  const today = todayStr();
+  const c = { kind: 'chore', title: 'New chore', category: null, assignee: null, priority: false, notes: null, howto: null, active: true,
+    repeat_mode: 'after', every: 1, unit: 'week', week_of_month: null, weekday: null, months: null };
+  c.anchor_date = c.due_date = S.initialDue(c, today);
+  return insertRow('tasks', c);
+}
+
+function choreRow(c, today) {
+  const due = S.shownDue(c, today), late = S.isOverdue(c, today);
+  const open = ui.howto === c.id && c.howto;
+  return `<div class="it${late ? ' late' : ''}">${`<button class="cb press" data-act="cdone" data-id="${c.id}" role="checkbox" aria-checked="false" aria-label="Done: ${esc(c.title)}"></button>`}
+    <button class="nm" data-act="citem" data-id="${c.id}">${esc(c.title)}<span class="meta"><b>${S.dueLabel(due, today)}</b> · ${esc(S.repeatLabel(c))}</span></button>
+    ${c.howto ? `<button class="qbtn press" data-act="howto" data-id="${c.id}" aria-expanded="${!!open}" aria-label="How to">${ic('q')}</button>` : ''}
+    <span class="who${whoKey(c) === 'me' ? ' me' : ''}" title="${esc(whoLine(c))}">${esc(whoInitial(c))}</span></div>
+    ${open ? `<div class="howto"><ol>${c.howto.split('\n').map((l) => l.trim()).filter(Boolean).map((l) => `<li>${esc(l.replace(/^\d+[.)]\s*/, ''))}</li>`).join('')}</ol></div>` : ''}`;
+}
+
+function choresView() {
+  const today = todayStr(), weekEnd = S.addDays(today, 6);
+  const tabs = `<div class="seg rise" role="group" aria-label="Chores or tasks"><button class="${ui.choreTab === 'chores' ? 'on' : ''}" data-act="ctab" data-v="chores">Chores</button><button class="${ui.choreTab === 'tasks' ? 'on' : ''}" data-act="ctab" data-v="tasks">Tasks</button></div>`;
+  if (ui.choreTab === 'tasks') return tasksView(tabs);
+  const all = choresAll().filter((c) => c.active && c.due_date);
+  const list = all.filter(passWho).map((c) => ({ c, due: S.shownDue(c, today) })).sort((a, b) => a.due.localeCompare(b.due) || a.c.title.localeCompare(b.c.title));
+  const over = list.filter((x) => S.isOverdue(x.c, today));
+  const hero = over[0] || list.find((x) => x.due === today);
+  const rest = list.filter((x) => x !== hero);
+  const groups = [
+    ['Overdue', rest.filter((x) => S.isOverdue(x.c, today))],
+    ['Today', rest.filter((x) => x.due === today && !S.isOverdue(x.c, today))],
+    ['This week', rest.filter((x) => x.due > today && x.due <= weekEnd)]
+  ];
+  const later = rest.filter((x) => x.due > weekEnd);
+  const off = choresAll().filter((c) => !c.active && passWho(c));
+  const overAll = all.filter((c) => S.isOverdue(c, today)).length;
+  const weekAll = all.filter((c) => { const d = S.shownDue(c, today); return d >= today && d <= weekEnd; }).length;
+  const chip = (k, label) => `<button class="fchip press${ui.who === k ? ' on' : ''}" data-act="cwhof" data-v="${k}">${esc(label)}</button>`;
+  const heroHtml = hero ? `<div class="stack rise" style="margin:12px 0 26px"><section class="hero chore">
+      <p class="eyebrow">${S.isOverdue(hero.c, today) ? `Overdue · ${plural(-S.diffDays(hero.c.due_date, today), 'day')}` : 'Due today'}</p>
+      <h2>${esc(hero.c.title)}</h2><p>${esc(S.repeatLabel(hero.c))} · ${esc(whoLine(hero.c))}</p>
+      <div class="acts"><button class="pri press" data-act="cdonehero" data-id="${hero.c.id}">${ic('check')}Done</button><button class="skipb press" data-act="cskip" data-id="${hero.c.id}">Skip</button></div>
+    </section></div>` : '';
+  const sections = groups.filter(([, xs]) => xs.length).map(([label, xs]) => `${sec(label, xs.length)}<div class="list">${xs.map((x) => choreRow(x.c, today)).join('')}</div>`).join('');
+  const laterHtml = later.length ? (ui.showLater
+    ? `${sec('Later', later.length)}<div class="list">${later.map((x) => choreRow(x.c, today)).join('')}</div>`
+    : `<button class="more press" data-act="clater">Show ${plural(later.length, 'later chore')}</button>`) : '';
+  const offHtml = ui.showLater && off.length ? `${sec('Switched off', off.length)}<div class="list">${off.map((c) => `<div class="it off"><span class="cb ghosted"></span><button class="nm" data-act="citem" data-id="${c.id}">${esc(c.title)}<span class="meta">${esc(S.repeatLabel(c))}</span></button></div>`).join('')}</div>` : '';
+  const pName = partnerId() ? userName(partnerId()) : null;
+  return `${header(overAll || weekAll ? [overAll && `${overAll} overdue`, weekAll && `${weekAll} this week`].filter(Boolean).join(' · ') : 'All caught up', 'Chores')}
+  <main>
+    ${tabs}
+    <div class="fchips rise">${chip('all', 'Everyone')}${chip('me', myName() || 'Me')}${pName ? chip('partner', pName) : ''}${chip('either', 'Either')}</div>
+    ${heroHtml}
+    ${!list.length && !off.length ? `<p class="empty">${choresAll().length ? 'Nothing for this filter.' : 'No chores yet. Import your list in Settings, or add one below.'}</p>` : ''}
+    ${sections}${laterHtml}${offHtml}
+    <div class="crow"><button class="more press" data-act="cnew">${ic('plus')}New chore</button><a class="more press" href="#/reset">${ic('reset')}Sunday reset</a></div>
+  </main>
+  ${dock('chores')}`;
+}
+
+function tasksView(tabs) {
+  const today = todayStr();
+  const open = tasksAll().filter((t) => !t.done_at);
+  const done = tasksAll().filter((t) => t.done_at).sort((a, b) => String(b.done_at).localeCompare(String(a.done_at))).slice(0, 30);
+  const sort = (a, b) => (b.priority - a.priority) || String(a.due_date || '9999').localeCompare(String(b.due_date || '9999')) || String(a.created_at || '').localeCompare(String(b.created_at || ''));
+  const lists = taskLists();
+  const cat = lists.includes(ui.taskCat) ? ui.taskCat : lists[0];
+  const row = (t) => `<div class="it${t.done_at ? ' done' : ''}">
+      <button class="cb${t.done_at ? ' on' : ''} press" data-act="tdone" data-id="${t.id}" role="checkbox" aria-checked="${!!t.done_at}" aria-label="${t.done_at ? 'Not done' : 'Done'}: ${esc(t.title)}">${t.done_at ? ic('check') : ''}</button>
+      <button class="nm" data-act="titem" data-id="${t.id}">${esc(t.title)}${t.due_date && !t.done_at ? `<span class="meta">${S.isOverdue(t, today) ? `<b>${S.dueLabel(t.due_date, today)}</b>` : `Due ${S.dueLabel(t.due_date, today)}`}</span>` : ''}</button>
+      ${t.done_at ? '' : `<button class="flag press${t.priority ? ' on' : ''}" data-act="tflag" data-id="${t.id}" aria-pressed="${t.priority}" aria-label="Priority">${ic('flag')}</button>`}</div>`;
+  const flagged = open.filter((t) => t.priority).length;
+  const byList = lists.map((l) => [l, open.filter((t) => (t.category || 'House') === l).sort(sort)]).filter(([, xs]) => xs.length);
+  return `${header(open.length ? `${open.length} open${flagged ? ` · ${flagged} flagged` : ''}` : 'All done', 'Tasks')}
+  <main>
+    ${tabs}
+    <form class="qa rise" data-form="tadd" autocomplete="off" style="margin-top:12px">
+      <div class="row"><input class="fld" name="name" type="text" placeholder="${cozy() ? 'What needs doing?' : 'Add a task'}" maxlength="120" enterkeyhint="done" aria-label="Add a task">
+      <button class="add press" type="submit" aria-label="Add">${ic('plus')}<span>Add</span></button></div>
+      <div class="chips">${lists.map((l) => `<button type="button" class="chip press${l === cat ? ' on' : ''}" data-act="tcat" data-v="${esc(l)}" aria-pressed="${l === cat}">${esc(l)}</button>`).join('')}<button type="button" class="chip press" data-act="tnewcat">${ic('plus')}List</button></div>
+    </form>
+    ${!open.length ? `<p class="empty">Nothing open. Add things as they come up; flag the ones that matter most.</p>` : ''}
+    ${byList.map(([l, xs]) => `${sec(esc(l), xs.length)}<div class="list">${xs.map(row).join('')}</div>`).join('')}
+    ${done.length ? (ui.showDone ? `${sec('Done', done.length)}<div class="list">${done.map(row).join('')}</div>` : `<button class="more press" data-act="tshowdone">Show ${plural(done.length, 'done task')}</button>`) : ''}
+  </main>
+  ${dock('chores')}`;
+}
+
+function resetView() {
+  const today = todayStr();
+  const miss = missed(today).sort((a, b) => a.due_date.localeCompare(b.due_date));
+  const fresh = miss.filter(S.resetsWeekly), stay = miss.filter((c) => !S.resetsWeekly(c));
+  const row = (c, next) => `<div class="it"><span class="pill">${esc(S.repeatLabel(c).split(',')[0].split(' · ')[0])}</span><span class="nm">${esc(c.title)}<span class="meta">${S.dueLabel(c.due_date, today)} · ${next}</span></span></div>`;
+  const doneMsg = ui.resetCount != null ? `<div class="hero sum rise" style="margin-bottom:14px"><p class="eyebrow">Done</p><h2>Week reset</h2><p>${ui.resetCount ? `${plural(ui.resetCount, 'chore')} start${ui.resetCount === 1 ? 's' : ''} fresh.` : 'Nothing needed resetting.'} History is kept.</p></div>` : '';
+  const dateLine = new Date(S.parse(today)).toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric', timeZone: 'UTC' });
+  return `${header(dateLine, 'Sunday reset')}
+  <main class="has-big">
+    ${doneMsg}
+    ${miss.length ? `<p class="rs-sum">${plural(miss.length, 'thing was', 'things were')} missed. ${fresh.length ? 'The weekly ones start fresh; ' : ''}${stay.length ? 'the rest stay until they’re done.' : ''}</p>` : (ui.resetCount == null ? `<p class="empty">Nothing missed. Nice week.</p>` : '')}
+    ${fresh.length ? `${sec('Starts fresh', fresh.length)}<div class="list">${fresh.map((c) => row(c, `next ${S.dueLabel(S.resetDue(c, today), today)}`)).join('')}</div>` : ''}
+    ${stay.length ? `${sec('Stays until done', stay.length)}<div class="list">${stay.map((c) => row(c, 'still due')).join('')}</div>` : ''}
+  </main>
+  ${fresh.length ? `<div class="bigbtn"><button class="pri press" data-act="resetweek">${ic('reset')}Reset week</button></div>` : ''}
+  ${dock('chores')}`;
+}
+
+function choreSheet(c) {
+  if (!c || c.deleted_at) return '';
+  const today = todayStr();
+  const pid = partnerId();
+  const seg = (act, opts, cur) => `<div class="seg sm">${opts.map(([v, l]) => `<button class="${v === cur ? 'on' : ''}" data-act="${act}" data-id="${c.id}" data-v="${v}" aria-pressed="${v === cur}">${esc(l)}</button>`).join('')}</div>`;
+  const sel = (field, opts, cur) => `<select class="sel" data-field="${field}" data-id="${c.id}">${opts.map(([v, l]) => `<option value="${v}"${String(v) === String(cur ?? '') ? ' selected' : ''}>${l}</option>`).join('')}</select>`;
+  const monthly = c.unit === 'month' || c.unit === 'year';
+  const hist = eventsOf(c.id).slice(0, 6).map((e) => `${S.dueLabel(S.localToday(new Date(e.at)), today)} · ${e.kind === 'done' ? `done by ${esc(userName(e.by_user))}` : e.kind === 'skip' ? 'skipped' : 'reset on Sunday'}`).join('<br>');
+  const months = c.months && c.months.length ? c.months : [];
+  return `<h2><input class="ttl" data-field="title" data-id="${c.id}" value="${esc(c.title)}" maxlength="120" aria-label="Chore name" enterkeyhint="done"><button class="lnk" data-act="close">Done</button></h2>
+    <div class="scroll">
+      <div class="acts2"><button class="pri press" data-act="cdone" data-id="${c.id}">${ic('check')}Mark done</button><button class="ghost press" data-act="cskip" data-id="${c.id}">Skip</button></div>
+      <div class="list frm">
+        <div class="frow">Who${seg('cwho', [['me', myName() || 'Me'], ...(pid ? [['partner', userName(pid)]] : []), ['either', 'Either']], whoKey(c))}</div>
+        <label class="frow">Next due<input type="date" class="dt" data-field="due_date" data-id="${c.id}" value="${c.due_date || ''}"></label>
+        <div class="frow">Repeats<span class="pair"><span class="evl">Every</span><input type="number" class="num" min="1" max="365" inputmode="numeric" data-field="every" data-id="${c.id}" value="${c.every || 1}" aria-label="Every">${sel('unit', [['day', c.every > 1 ? 'days' : 'day'], ['week', c.every > 1 ? 'weeks' : 'week'], ['month', c.every > 1 ? 'months' : 'month'], ['year', c.every > 1 ? 'years' : 'year']], c.unit)}</span></div>
+        ${monthly ? `<div class="frow">Week of the month${sel('week_of_month', [['', 'Any'], ['1', 'Week 1'], ['2', 'Week 2'], ['3', 'Week 3'], ['4', 'Week 4']], c.week_of_month)}</div>` : ''}
+        ${c.unit === 'week' || (monthly && c.week_of_month) ? `<div class="frow">Day${sel('weekday', [['', 'Any'], ...S.WEEKDAYS.map((d, i) => [String(i), d])], c.weekday)}</div>` : ''}
+        <div class="frow">Count from${seg('cmode', [['after', 'Last done'], ['fixed', 'Schedule']], c.repeat_mode === 'fixed' ? 'fixed' : 'after')}</div>
+      </div>
+      <p class="hint">${esc(S.repeatLabel(c))}. ${c.repeat_mode === 'fixed' ? 'Stays on the calendar even when it’s done late.' : 'The next one is counted from the day it’s done.'}</p>
+      ${sec('Only in these months', months.length ? `${months.length} of 12` : 'All year')}
+      <div class="months">${S.MONTHS.map((m, i) => `<button class="press${!months.length || months.includes(i + 1) ? ' on' : ''}" data-act="cmonth" data-id="${c.id}" data-m="${i + 1}" aria-pressed="${!months.length || months.includes(i + 1)}">${m}</button>`).join('')}</div>
+      ${sec('How-to', 'One step per line')}
+      <textarea class="ta" data-field="howto" data-id="${c.id}" rows="4" placeholder="Steps for anything unusual">${esc(c.howto || '')}</textarea>
+      ${sec('Notes')}
+      <textarea class="ta" data-field="notes" data-id="${c.id}" rows="2" placeholder="Optional">${esc(c.notes || '')}</textarea>
+      <div class="list frm" style="margin-top:12px">
+        <label class="frow">Group<input class="txt" data-field="category" data-id="${c.id}" value="${esc(c.category || '')}" placeholder="Optional" maxlength="40"></label>
+        <button class="frow swr" role="switch" aria-checked="${c.active}" data-act="cactive" data-id="${c.id}">Switched on<span class="tg" aria-hidden="true"></span></button>
+      </div>
+      ${hist ? `${sec('History')}<div class="hist">${hist}</div>` : ''}
+      <button class="ghost press" data-act="cdel" data-id="${c.id}" style="margin-top:14px">Delete chore</button>
+    </div>`;
+}
+
+function taskSheet(t) {
+  if (!t || t.deleted_at) return '';
+  const lists = taskLists();
+  return `<h2><input class="ttl" data-field="title" data-id="${t.id}" value="${esc(t.title)}" maxlength="120" aria-label="Task" enterkeyhint="done"><button class="lnk" data-act="close">Done</button></h2>
+    <div class="list frm">
+      <label class="frow">List<select class="sel" data-field="category" data-id="${t.id}">${lists.map((l) => `<option${l === (t.category || 'House') ? ' selected' : ''}>${esc(l)}</option>`).join('')}</select></label>
+      <label class="frow">Due<input type="date" class="dt" data-field="due_date" data-id="${t.id}" value="${t.due_date || ''}"></label>
+      <button class="frow swr" role="switch" aria-checked="${!!t.priority}" data-act="tflag" data-id="${t.id}">Priority<span class="tg" aria-hidden="true"></span></button>
+    </div>
+    ${sec('Notes')}
+    <textarea class="ta" data-field="notes" data-id="${t.id}" rows="3" placeholder="Optional">${esc(t.notes || '')}</textarea>
+    <button class="ghost press" data-act="tdel" data-id="${t.id}" style="margin-top:14px">Delete task</button>`;
+}
+
 /* --- bottom sheets --- */
 function sheetView() {
   const s = ui.sheet;
@@ -494,8 +746,10 @@ function sheetView() {
   if (s.type === 'addfrom') body = addFromSheet(s.tab);
   else if (s.type === 'gitem') body = groceryItemSheet(findRow('grocery_items', s.id));
   else if (s.type === 'pitem') body = pantryItemSheet(findRow('pantry_items', s.id));
+  else if (s.type === 'chore') body = choreSheet(findRow('tasks', s.id));
+  else if (s.type === 'task') body = taskSheet(findRow('tasks', s.id));
   if (!body) { ui.sheet = null; return ''; }
-  return `<div class="scrim" data-act="close"></div><div class="bs${s.type === 'addfrom' ? '' : ' short'}" role="dialog" aria-modal="true">
+  return `<div class="scrim" data-act="close"></div><div class="bs${s.type === 'addfrom' || s.type === 'chore' ? '' : ' short'}" role="dialog" aria-modal="true">
     <div class="grab" data-act="close"></div>${body}</div>`;
 }
 
@@ -571,6 +825,7 @@ function settingsView() {
     <p class="gt">Lists</p>
     <div class="grp rise d1">
       <label class="fl press">Import Costco list<span class="v">${costco ? `${costco} items` : 'CSV file'}</span><input class="hide" type="file" accept=".csv,text/csv" data-act="costcocsv"></label>
+      <label class="fl press">Import chores<span class="v">${choresAll().length ? `${choresAll().length} chores` : 'CSV file'}</span><input class="hide" type="file" accept=".csv,text/csv" data-act="chorescsv"></label>
     </div>
     <button class="ghost press rise d2" data-act="signout">Sign out</button>
     <p class="ver" data-act="ver">Version ${VERSION}</p>
@@ -611,9 +866,54 @@ async function importCostco(file) {
   render({ soft: true });
 }
 
+/* ---------- chores CSV import ----------
+   columns: name, group, repeat_mode (fixed | after_completion | once), every, unit, week_of_month,
+   months (Mar;Jun), day (Tue), owner (Me | Either), active (yes | no), notes, howto, start_date */
+async function importChores(file) {
+  const rows = parseCsv(await file.text());
+  const head = (rows.shift() || []).map(norm);
+  const col = (n) => head.indexOf(n);
+  const get = (r, n) => (col(n) < 0 ? '' : (r[col(n)] || '').trim());
+  if (col('name') < 0) { alert('That file needs a "name" column.'); return; }
+  const today = todayStr();
+  const have = new Set(live('tasks').map((t) => norm(t.title)));
+  let chores = 0, tasks = 0, off = 0;
+  for (const r of rows) {
+    const title = get(r, 'name').slice(0, 120);
+    if (!title || have.has(norm(title))) continue;
+    const mode = norm(get(r, 'repeat_mode'));
+    const base = { title, notes: get(r, 'notes') || null, howto: get(r, 'howto') || null, priority: false, done_at: null };
+    if (mode === 'once') {
+      insertRow('tasks', { ...base, kind: 'task', category: 'House', priority: true, active: true, repeat_mode: 'once', every: 1, unit: 'week', due_date: get(r, 'start_date') || null });
+      tasks++; have.add(norm(title)); continue;
+    }
+    const day = get(r, 'day').slice(0, 3).toLowerCase();
+    const months = get(r, 'months').split(/[;,]/).map((m) => S.MONTHS.findIndex((x) => x.toLowerCase() === m.trim().slice(0, 3).toLowerCase()) + 1).filter((m) => m > 0);
+    const unit = ['day', 'week', 'month', 'year'].includes(norm(get(r, 'unit'))) ? norm(get(r, 'unit')) : 'week';
+    const c = {
+      ...base, kind: 'chore', category: get(r, 'group') || null,
+      assignee: norm(get(r, 'owner')) === 'me' ? myId() : null,
+      active: norm(get(r, 'active')) !== 'no',
+      repeat_mode: mode === 'fixed' ? 'fixed' : 'after',
+      every: Math.max(1, parseInt(get(r, 'every'), 10) || 1), unit,
+      week_of_month: parseInt(get(r, 'week_of_month'), 10) || null,
+      weekday: day ? S.WEEKDAYS.findIndex((d) => d.toLowerCase() === day) : null,
+      months: months.length && months.length < 12 ? months : null,
+      start_date: get(r, 'start_date') || null
+    };
+    if (c.weekday < 0) c.weekday = null;
+    c.anchor_date = c.due_date = S.initialDue(c, today);
+    delete c.start_date;
+    insertRow('tasks', c);
+    chores++; if (!c.active) off++; have.add(norm(title));
+  }
+  alert(chores || tasks ? `Added ${plural(chores, 'chore')}${off ? ` (${off} switched off)` : ''}${tasks ? ` and ${plural(tasks, 'task')}` : ''}.` : 'Everything in that file is already here.');
+  render({ soft: true });
+}
+
 /* ---------- render + events ---------- */
 let current = '';
-const ROUTES = ['home', 'grocery', 'kitchen', 'settings'];
+const ROUTES = ['home', 'grocery', 'kitchen', 'chores', 'reset', 'settings'];
 function route() {
   if (!api.getSession()) return 'signin';
   if (PREVIEW && PREVIEW !== 'signin' && !location.hash) return PREVIEW;
@@ -621,7 +921,7 @@ function route() {
   return ROUTES.includes(h) ? h : 'home';
 }
 
-const VIEWS = { signin: signinView, home: homeView, grocery: groceryView, kitchen: kitchenView, settings: settingsView };
+const VIEWS = { signin: signinView, home: homeView, grocery: groceryView, kitchen: kitchenView, chores: choresView, reset: resetView, settings: settingsView };
 
 function render({ soft = false, keepFocus = null, fx = null } = {}) {
   const r = route();
@@ -656,6 +956,14 @@ function render({ soft = false, keepFocus = null, fx = null } = {}) {
 $app.addEventListener('submit', async (e) => {
   e.preventDefault();
   const f = e.target, kind = f.dataset.form;
+  if (kind === 'tadd') {
+    const name = f.name.value.trim();
+    if (!name) return;
+    const lists = taskLists(), cat = lists.includes(ui.taskCat) ? ui.taskCat : lists[0];
+    const t = insertRow('tasks', { kind: 'task', title: name.slice(0, 120), category: cat, priority: false, active: true, repeat_mode: 'once', every: 1, unit: 'week', due_date: null, done_at: null });
+    render({ soft: true, keepFocus: '[data-form="tadd"] .fld', fx: [[`.it:has([data-id="${t.id}"])`, 'pop']] });
+    return;
+  }
   if (kind === 'gadd' || kind === 'padd' || kind === 'sadd') {
     const name = f.name.value.trim();
     if (!name) return;
@@ -754,6 +1062,72 @@ $app.addEventListener('click', (e) => {
     case 'pitem': ui.sheet = { type: 'pitem', id }; return soft();
     case 'ploc': updateRow('pantry_items', id, { location: t.dataset.loc }); ui.sheet = null; return soft();
     case 'pdel': removeRow('pantry_items', id); ui.sheet = null; return soft();
+    // chores
+    case 'ctab': ui.choreTab = t.dataset.v; ls.set(K.choreTab, ui.choreTab); return soft();
+    case 'cwhof': ui.who = t.dataset.v; ls.set(K.who, ui.who); return soft();
+    case 'citem': ui.sheet = { type: 'chore', id }; return soft();
+    case 'howto': ui.howto = ui.howto === id ? null : id; return soft();
+    case 'clater': ui.showLater = !ui.showLater; return soft();
+    case 'cdone': case 'cskip': {
+      const c = findRow('tasks', id); if (!c) return;
+      if (a === 'cdone' && t.classList.contains('cb')) {
+        // Check, squish, then the row moves on to its next date.
+        t.classList.add('on', 'jelly'); t.innerHTML = ic('check');
+        setTimeout(() => { closeChore(c, 'done'); soft(); }, matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 380);
+        return;
+      }
+      closeChore(c, a === 'cdone' ? 'done' : 'skip'); return soft(ui.sheet ? [['.bs .hint', 'pop']] : null);
+    }
+    case 'cdonehero': {
+      const c = findRow('tasks', id); if (!c || t.classList.contains('ld')) return;
+      t.classList.add('ld');
+      const still = matchMedia('(prefers-reduced-motion: reduce)').matches;
+      setTimeout(() => t.classList.add('ok'), still ? 0 : 280);
+      setTimeout(() => { closeChore(c, 'done'); soft(); }, still ? 0 : 820);
+      return;
+    }
+    case 'cnew': { const c = newChore(); ui.sheet = { type: 'chore', id: c.id }; render({ soft: true, keepFocus: '.bs .ttl' }); $app.querySelector('.bs .ttl')?.select(); return; }
+    case 'cwho': { const v = t.dataset.v; updateRow('tasks', id, { assignee: v === 'me' ? myId() : v === 'partner' ? partnerId() : null }); return soft(); }
+    case 'cmode': updateRow('tasks', id, { repeat_mode: t.dataset.v }); return soft();
+    case 'cmonth': {
+      const c = findRow('tasks', id); if (!c) return;
+      const m = +t.dataset.m;
+      let ms = c.months && c.months.length ? [...c.months] : [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12];
+      ms = ms.includes(m) ? ms.filter((x) => x !== m) : [...ms, m].sort((x, y) => x - y);
+      if (!ms.length) return; // at least one month
+      updateRow('tasks', id, { months: ms.length === 12 ? null : ms }); return soft();
+    }
+    case 'cactive': {
+      const c = findRow('tasks', id); if (!c) return;
+      const on = !c.active;
+      updateRow('tasks', id, on && !c.due_date ? { active: on, due_date: S.initialDue(c, todayStr()) } : { active: on }); return soft();
+    }
+    case 'cdel': if (!confirm('Delete this chore? Its history is kept.')) return; removeRow('tasks', id); ui.sheet = null; return soft();
+    // tasks
+    case 'tcat': ui.taskCat = t.dataset.v; return soft();
+    case 'tnewcat': {
+      const n = (prompt('Name the new list') || '').trim().slice(0, 40);
+      if (!n) return;
+      ls.set(K.lists, [...new Set([...ls.get(K.lists, []), n])]); ui.taskCat = n; return soft();
+    }
+    case 'tdone': {
+      const x = findRow('tasks', id); if (!x) return;
+      if (x.done_at) updateRow('tasks', id, { done_at: null });
+      else { recordEvent(x, 'done', x.due_date || todayStr()); updateRow('tasks', id, { done_at: new Date().toISOString() }); }
+      return soft([[`[data-act="tdone"][data-id="${id}"]`, 'jelly']]);
+    }
+    case 'titem': ui.sheet = { type: 'task', id }; return soft();
+    case 'tflag': { const x = findRow('tasks', id); if (x) updateRow('tasks', id, { priority: !x.priority }); return soft([[`.flag[data-id="${id}"]`, 'jelly']]); }
+    case 'tshowdone': ui.showDone = !ui.showDone; return soft();
+    case 'tdel': removeRow('tasks', id); ui.sheet = null; return soft();
+    case 'resetweek': {
+      if (t.classList.contains('ld')) return;
+      t.classList.add('ld');
+      const still = matchMedia('(prefers-reduced-motion: reduce)').matches;
+      setTimeout(() => t.classList.add('ok'), still ? 0 : 320);
+      setTimeout(() => { ui.resetCount = resetWeek(); soft(); }, still ? 0 : 900);
+      return;
+    }
   }
 });
 let verTaps = 0, verTimer = 0;
@@ -761,14 +1135,30 @@ let verTaps = 0, verTimer = 0;
 $app.addEventListener('change', (e) => {
   if (e.target.id === 'nm') saveName(e.target.value);
   if (e.target.dataset.act === 'costcocsv' && e.target.files[0]) importCostco(e.target.files[0]);
+  if (e.target.dataset.act === 'chorescsv' && e.target.files[0]) importChores(e.target.files[0]);
+  const f = e.target.dataset.field, fid = e.target.dataset.id;
+  if (f && fid) {
+    const row = findRow('tasks', fid); if (!row) return;
+    let v = e.target.value;
+    const patch = {};
+    if (f === 'title') { v = v.trim().slice(0, 120); if (!v) return render({ soft: true, keepFocus: '__none' }); patch.title = v; }
+    else if (f === 'every') patch.every = Math.max(1, Math.min(365, parseInt(v, 10) || 1));
+    else if (f === 'week_of_month' || f === 'weekday') patch[f] = v === '' ? null : +v;
+    else if (f === 'due_date') patch.due_date = v || null;
+    else if (f === 'unit') { patch.unit = v; if (v === 'day') { patch.weekday = null; patch.week_of_month = null; } if (v === 'week') patch.week_of_month = null; }
+    else patch[f] = v.trim() || null;
+    if (patch.due_date && row.kind === 'chore') patch.anchor_date = patch.due_date; // fixed monthly schedules keep this day
+    updateRow('tasks', fid, patch);
+    render({ soft: true, keepFocus: '__none' });
+  }
 });
 function syncAddButton(input) {
   const b = input?.form?.querySelector('.add');
-  if (b && input.form.dataset.form === 'gadd') b.classList.toggle('ready', !!input.value.trim());
+  if (b && (input.form.dataset.form === 'gadd' || input.form.dataset.form === 'tadd')) b.classList.toggle('ready', !!input.value.trim());
 }
 $app.addEventListener('input', (e) => { if (e.target.classList.contains('fld')) syncAddButton(e.target); });
 
-const RIPPLE = '.pri,.add,.chip,.tag,.plus,.opt,.send,.seg > button,.dock a,.hlo button,.clear,.ghost,.tile,.card,.hero.press,.it .nm,.lnk,.pick';
+const RIPPLE = '.pri,.add,.chip,.tag,.plus,.opt,.send,.seg > button,.dock a,.hlo button,.clear,.ghost,.tile,.card,.hero.press,.it .nm,.lnk,.pick,.fchip,.skipb,.more,.flag,.qbtn,.months button';
 $app.addEventListener('pointerdown', (e) => {
   const b = e.target.closest(RIPPLE);
   if (!b || matchMedia('(prefers-reduced-motion: reduce)').matches) return;
@@ -782,11 +1172,11 @@ $app.addEventListener('pointerdown', (e) => {
 }, { passive: true });
 
 $app.addEventListener('keydown', (e) => {
-  if (e.target.id === 'nm' && e.key === 'Enter') e.target.blur();
+  if ((e.target.id === 'nm' || e.target.classList.contains('ttl') || e.target.classList.contains('txt')) && e.key === 'Enter') e.target.blur();
   if (e.key === 'Escape' && ui.sheet) { ui.sheet = null; ui.edit = false; render({ soft: true, keepFocus: '__none' }); }
 });
 
-addEventListener('hashchange', () => { ui.sheet = null; ui.edit = false; render(); });
+addEventListener('hashchange', () => { ui.sheet = null; ui.edit = false; ui.resetCount = null; render(); });
 addEventListener('online', () => { state.netFail = false; pull(); rt.wake(); });
 addEventListener('offline', updateBadge);
 document.addEventListener('visibilitychange', () => { if (!document.hidden) { T.apply(); pull(); rt.wake(); } });
