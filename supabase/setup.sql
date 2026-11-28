@@ -237,11 +237,11 @@ create table if not exists public.calendar_sync (
 create table if not exists public.day_settings (
   id              int primary key default 1 check (id = 1),
   nap_start       time not null default '13:00',
-  nap_end         time not null default '15:00',
+  nap_end         time not null default '16:00',
   dinner          time not null default '18:00',
   bed             time not null default '20:00',
   post_call_hours int  not null default 10 check (post_call_hours between 0 and 24),
-  baby            jsonb not null default '[]'::jsonb,  -- [{ "time": "10:30", "label": "Bottle" }]
+  baby            jsonb not null default '[]'::jsonb,  -- unused (the baby has his own app)
   updated_at      timestamptz not null default now()
 );
 insert into public.day_settings (id) values (1) on conflict (id) do nothing;
@@ -309,6 +309,9 @@ alter table public.day_overrides enable row level security;
 alter table public.kid_items enable row level security;
 grant select on public.calendar_events, public.calendar_sync to authenticated;
 grant select, insert, update on public.day_settings, public.day_overrides, public.kid_items to authenticated;
+
+-- 7b. Toddler nap is a window (nap_start to nap_end, e.g. 1-4 PM) and a length; the actual nap is set per day.
+alter table public.day_settings add column if not exists nap_minutes int not null default 120 check (nap_minutes between 15 and 300);
 
 -- 8. Calendar sync every 30 minutes (after deploying the calendar-sync function).
 --    Replace PROJECT-REF with your project's ref (the part before .supabase.co).

@@ -126,7 +126,8 @@ if (PREVIEW) {
   state.rows.calendar_sync = Q.get('calerr')
     ? [{ source: 'google', last_ok_at: new Date(Date.now() - 6 * 3600000).toISOString(), last_error: null }, { source: 'outlook', last_ok_at: new Date(Date.now() - 6 * 3600000).toISOString(), last_error: 'Feed returned 404' }]
     : [{ source: 'google', last_ok_at: new Date(Date.now() - 20 * 60000).toISOString() }, { source: 'outlook', last_ok_at: new Date(Date.now() - 20 * 60000).toISOString() }];
-  state.rows.day_settings = [{ id: 1, nap_start: '13:00', nap_end: '15:00', dinner: '18:00', bed: '20:00', post_call_hours: 10, baby: [{ time: '10:30', label: 'Bottle' }, { time: '15:00', label: 'Bottle' }] }];
+  state.rows.day_settings = [{ id: 1, nap_start: '13:00', nap_end: '16:00', nap_minutes: 120, dinner: '18:00', bed: '20:00', post_call_hours: 10 }];
+  if (Q.get('nap')) state.rows.day_overrides = [{ date: today, nap_start: Q.get('nap'), nap_end: (() => { const [h, m] = Q.get('nap').split(':').map(Number); return `${String(h + 2).padStart(2, '0')}:${String(m).padStart(2, '0')}`; })() }];
   state.rows.kid_items = [
     { id: 'k1', kind: 'appointment', title: 'Pediatrician', starts_at: at(0, 16, 30) },
     { id: 'k2', kind: 'appointment', title: 'Dentist checkup', starts_at: at(12, 10) },
@@ -773,7 +774,8 @@ function taskSheet(t) {
 /* --- today, calendar, kids, event shifts --- */
 const TZ = Intl.DateTimeFormat().resolvedOptions().timeZone;
 const FN_URL = `${(window.HOMEOS_CONFIG?.supabaseUrl || '').replace(/\/+$/, '')}/functions/v1/calendar-sync`;
-const daySet = () => ({ nap_start: '13:00', nap_end: '15:00', dinner: '18:00', bed: '20:00', post_call_hours: 10, baby: [], ...(state.rows.day_settings[0] || {}) });
+const daySet = () => ({ nap_start: '13:00', nap_end: '16:00', nap_minutes: 120, dinner: '18:00', bed: '20:00', post_call_hours: 10, ...(state.rows.day_settings[0] || {}) });
+const nowHM = () => hhmmOf(new Date().toISOString());
 const hm = (t) => String(t || '').slice(0, 5);
 function clock(t, withAp = true) { // '13:30' -> '1:30 PM'
   const [h, m] = hm(t).split(':').map(Number);
@@ -824,7 +826,8 @@ async function kickCalendar(force = false) {
 
 function timeline(date) {
   const ds = daySet(), ov = findRow('day_overrides', date) || {};
-  const nap = ov.nap_start ? [ov.nap_start, ov.nap_end] : [ds.nap_start, ds.nap_end];
+  const napSet = !!ov.nap_start;
+  const nap = napSet ? [ov.nap_start, ov.nap_end] : [ds.nap_start, ds.nap_end];
   const items = [];
   for (const e of eventsOn(date)) {
     if (e.all_day) continue;
@@ -833,20 +836,28 @@ function timeline(date) {
     items.push({ k: hhmmOf(e.starts_at), t: timeOf(e.starts_at), w: e.kind === 'meeting' ? 'Work meeting' : e.title || 'Busy', sub: e.kind === 'event_shift' ? `${D.hoursLabel(e.starts_at, e.ends_at, TZ, true)}` : dur, tag: e.kind === 'event_shift' ? 'Event shift' : '', cls: 'ev' });
   }
   for (const a of apptsOn(date)) items.push({ k: hhmmOf(a.starts_at), t: timeOf(a.starts_at), w: a.title, sub: 'Kids', cls: 'ev', go: '#/kids' });
-  items.push({ k: hm(nap[0]), t: span(nap[0], nap[1]), w: 'Nap', sub: ov.nap_start ? `Usually ${span(ds.nap_start, ds.nap_end)}` : '', nap: true });
+  items.push(napSet
+    ? { k: hm(nap[0]), t: span(nap[0], nap[1]), w: 'Nap', sub: '', nap: true }
+    : { k: hm(nap[0]), t: span(nap[0], nap[1]), w: 'Nap', sub: `About ${napLen(ds.nap_minutes)}`, nap: true, window: true });
   items.push({ k: hm(ds.dinner), t: clock(ds.dinner), w: 'Dinner' });
   items.push({ k: hm(ds.bed), t: clock(ds.bed), w: 'Bed' });
   items.sort((a, b) => a.k.localeCompare(b.k));
   const allDay = eventsOn(date).filter((e) => e.all_day);
-  return { items, allDay, napMoved: !!ov.nap_start, nap };
+  return { items, allDay, napSet, nap };
 }
 
 function tlHtml(date, withNapBtn) {
-  const { items, allDay, napMoved, nap } = timeline(date);
-  const now = hhmmOf(new Date().toISOString());
+  const { items, allDay, napSet, nap } = timeline(date);
+  const now = nowHM();
   const row = (x) => {
-    const btn = x.nap && withNapBtn ? `<button class="mini press" data-act="napshift" data-date="${date}">${napMoved ? 'Usual time' : `Today ${span(addMin(nap[0], 60), addMin(nap[1], 60)).replace(' PM', '').replace(' AM', '')}`}</button>` : '';
-    const cur = withNapBtn && x.nap && now >= hm(nap[0]) && now < hm(nap[1]);
+    let btn = '';
+    if (x.nap && withNapBtn) {
+      const asleep = napSet && now >= hm(nap[0]) && now < hm(nap[1]);
+      btn = napSet
+        ? `<button class="mini press" data-act="${asleep ? 'napup' : 'napedit'}" data-date="${date}">${asleep ? 'Up' : 'Change'}</button>`
+        : `<button class="mini press go" data-act="napnow" data-date="${date}">Down now</button><button class="mini press" data-act="napedit" data-date="${date}" aria-label="Pick a nap time">${ic('chev')}</button>`;
+    }
+    const cur = withNapBtn && x.nap && napSet && now >= hm(nap[0]) && now < hm(nap[1]);
     return `<div class="r ${x.cls || ''}${cur ? ' now' : ''}"><span class="t">${esc(x.t)}</span><span class="w">${esc(x.w)}${x.tag ? `<span class="tag2">${esc(x.tag)}</span>` : ''}${x.sub ? `<small>${esc(x.sub)}</small>` : ''}</span>${btn}</div>`;
   };
   return `${allDay.length ? `<div class="alld">${allDay.map((e) => `<span>${esc(e.title || 'Busy')}</span>`).join('')}</div>` : ''}<div class="tl rise d1">${items.map(row).join('')}</div>`;
@@ -914,8 +925,6 @@ function homeView() {
         <div class="prog" role="img" aria-label="${doneCount} of ${s.length} setup steps done"><div class="trk"><b style="width:${(doneCount / s.length) * 100}%"></b></div><span>${doneCount} of ${s.length}</span></div>
         ${next.later ? `<button class="later press" data-act="later">Later</button>` : ''}
       </${next.go ? 'a' : 'section'}></div>` : '';
-  const ds = daySet();
-  const baby = (ds.baby || []).filter((b) => b && b.label);
   return `${header(today(), name ? `${greeting()},<br>${esc(name)}` : greeting())}
   <main>
     ${syncWarn()}
@@ -923,7 +932,6 @@ function homeView() {
     ${shiftHero(td)}
     ${resetCard()}
     ${sec('Today')}${tlHtml(td, true)}
-    ${baby.length ? `${sec('Baby')}<div class="tl">${baby.sort((a, b) => hm(a.time).localeCompare(hm(b.time))).map((b) => `<div class="r"><span class="t">${esc(clock(b.time))}</span><span class="w">${esc(b.label)}</span></div>`).join('')}</div>` : ''}
     <div style="margin-top:14px">${todayCards(td)}</div>
     <a class="more press" href="#/calendar">${ic('cal')}Week and month</a>
     ${calFooter()}
@@ -952,6 +960,22 @@ function calendarView() {
   return `${header(`${start} – ${end}`, ui.calTab === 'month' ? 'Next 5 weeks' : 'This week')}
   <main>${syncWarn()}${seg}${cards.join('')}${calFooter()}</main>
   ${dock('home')}`;
+}
+
+const napLen = (m) => { m = +m || 120; const h = m / 60; return Number.isInteger(h) ? `${h} hour${h === 1 ? '' : 's'}` : `${Math.floor(h)}½ hours`; };
+function napSheet(date) {
+  const ds = daySet(), ov = findRow('day_overrides', date) || {};
+  const picks = [];
+  for (let t = hm(ds.nap_start); t < hm(ds.nap_end) && picks.length < 8; t = addMin(t, 30)) picks.push(t);
+  return `<h2>Toddler nap<button class="lnk" data-act="close">Done</button></h2>
+    <p class="hint" style="margin-top:0">Usually ${span(ds.nap_start, ds.nap_end)}, about ${napLen(ds.nap_minutes)}. Shared with both phones.</p>
+    <p class="gt">Went down at</p>
+    <div class="picks2">${picks.map((t) => `<button class="pick press${ov.nap_start && hm(ov.nap_start) === t ? ' on' : ''}" data-act="napset" data-date="${date}" data-t="${t}">${clock(t)}</button>`).join('')}</div>
+    <div class="list frm" style="margin-top:10px">
+      <label class="frow">Down<input type="time" class="dt sm" data-nap="nap_start" data-date="${date}" value="${hm(ov.nap_start) || ''}"></label>
+      <label class="frow">Up<input type="time" class="dt sm" data-nap="nap_end" data-date="${date}" value="${hm(ov.nap_end) || ''}"></label>
+    </div>
+    ${ov.nap_start ? `<button class="ghost press" data-act="napclear" data-date="${date}" style="margin-top:12px">No nap today / clear</button>` : ''}`;
 }
 
 /* kids */
@@ -1071,6 +1095,7 @@ function sheetView() {
   else if (s.type === 'task') body = taskSheet(findRow('tasks', s.id));
   else if (s.type === 'kid') body = kidSheet(findRow('kid_items', s.id));
   else if (s.type === 'activation') body = activationSheet(s.date);
+  else if (s.type === 'nap') body = napSheet(s.date);
   else if (s.type === 'addcal') { const k = findRow('kid_items', s.id); body = k && k.starts_at ? `<h2>${esc(k.title)}</h2><div class="list opts"><a class="opt press" target="_blank" rel="noopener" href="${gcalLink(k)}">Google Calendar${ic('chev')}</a><button class="opt press" data-act="ics" data-id="${k.id}">Phone calendar, with a 1 hour alert${ic('chev')}</button></div>` : ''; }
   if (!body) { ui.sheet = null; return ''; }
   return `<div class="scrim" data-act="close"></div><div class="bs${s.type === 'addfrom' || s.type === 'chore' ? '' : ' short'}" role="dialog" aria-modal="true">
@@ -1148,13 +1173,12 @@ function settingsView() {
     </div>
     <p class="gt">Day</p>
     <div class="grp rise d1">
-      <label class="fl">Nap<span class="pair"><input type="time" class="dt sm" data-dset="nap_start" value="${hm(daySet().nap_start)}" aria-label="Nap starts"><span class="evl">to</span><input type="time" class="dt sm" data-dset="nap_end" value="${hm(daySet().nap_end)}" aria-label="Nap ends"></span></label>
+      <label class="fl">Nap window<span class="pair"><input type="time" class="dt sm" data-dset="nap_start" value="${hm(daySet().nap_start)}" aria-label="Nap window starts"><span class="evl">to</span><input type="time" class="dt sm" data-dset="nap_end" value="${hm(daySet().nap_end)}" aria-label="Nap window ends"></span></label>
+      <label class="fl">Nap length<select class="sel" data-dset="nap_minutes">${[60, 90, 120, 150, 180].map((m) => `<option value="${m}"${+daySet().nap_minutes === m ? ' selected' : ''}>${napLen(m)}</option>`).join('')}</select></label>
       <label class="fl">Dinner<input type="time" class="dt sm" data-dset="dinner" value="${hm(daySet().dinner)}"></label>
       <label class="fl">Bed<input type="time" class="dt sm" data-dset="bed" value="${hm(daySet().bed)}"></label>
       <label class="fl">Post call<span class="pair"><input type="number" class="num" min="0" max="24" inputmode="numeric" data-dset="post_call_hours" value="${daySet().post_call_hours}"><span class="evl">hours</span></span></label>
     </div>
-    <p class="gt">Baby, one per line (like “10:30 Bottle”)</p>
-    <textarea class="ta rise d1" data-dset="baby" rows="3" placeholder="10:30 Bottle">${esc((daySet().baby || []).map((b) => `${b.time ? clock(b.time).replace(' ', '') : ''} ${b.label}`.trim()).join('\n'))}</textarea>
     <p class="gt" style="margin-top:18px">Calendar</p>
     <div class="grp rise d1">
       ${calSync().setup ? calSync().rows.map((r) => `<div class="fl">${r.source === 'google' ? 'Google' : 'Outlook'}<span class="v">${r.last_error ? esc(r.last_error) : r.last_ok_at ? `Updated ${timeOf(r.last_ok_at)}` : 'Waiting'}</span></div>`).join('') : '<div class="fl">Not connected<span class="v">See README, step 10</span></div>'}
@@ -1469,12 +1493,11 @@ $app.addEventListener('click', (e) => {
     case 'tshowdone': ui.showDone = !ui.showDone; return soft();
     case 'tdel': removeRow('tasks', id); ui.sheet = null; return soft();
     // today + calendar
-    case 'napshift': {
-      const d = t.dataset.date, ov = findRow('day_overrides', d) || {}, ds = daySet();
-      if (ov.nap_start) saveKeyed('day_overrides', d, { nap_start: null, nap_end: null });
-      else saveKeyed('day_overrides', d, { nap_start: addMin(ds.nap_start, 60), nap_end: addMin(ds.nap_end, 60) });
-      return soft([['[data-act="napshift"]', 'jelly']]);
-    }
+    case 'napnow': { const n = nowHM(); saveKeyed('day_overrides', t.dataset.date, { nap_start: n, nap_end: addMin(n, +daySet().nap_minutes || 120) }); return soft([['.tl .r.now', 'pop']]); }
+    case 'napup': saveKeyed('day_overrides', t.dataset.date, { nap_end: nowHM() }); return soft();
+    case 'napedit': ui.sheet = { type: 'nap', date: t.dataset.date }; return soft();
+    case 'napset': { const v = t.dataset.t; saveKeyed('day_overrides', t.dataset.date, { nap_start: v, nap_end: addMin(v, +daySet().nap_minutes || 120) }); ui.sheet = null; return soft(); }
+    case 'napclear': saveKeyed('day_overrides', t.dataset.date, { nap_start: null, nap_end: null }); ui.sheet = null; return soft();
     case 'actopen': ui.sheet = { type: 'activation', date: t.dataset.date }; return soft();
     case 'actsave': {
       const inp = $app.querySelector('[data-af="activated_from"]');
@@ -1522,6 +1545,14 @@ $app.addEventListener('change', (e) => {
     updateRow('kid_items', ds.id, { [ds.kf]: v });
     return render({ soft: true, keepFocus: '__none' });
   }
+  if (ds.nap && ds.date) {
+    const v = e.target.value || null, ov = findRow('day_overrides', ds.date) || {};
+    const patch = { [ds.nap]: v };
+    if (ds.nap === 'nap_start' && v && !ov.nap_end) patch.nap_end = addMin(v, +daySet().nap_minutes || 120);
+    if (ds.nap === 'nap_start' && !v) patch.nap_end = null;
+    saveKeyed('day_overrides', ds.date, patch);
+    return render({ soft: true, keepFocus: '__none' });
+  }
   if (ds.af && ds.date) {
     saveKeyed('day_overrides', ds.date, { [ds.af]: e.target.value ? new Date(e.target.value).toISOString() : null });
     return render({ soft: true, keepFocus: '__none' });
@@ -1529,7 +1560,7 @@ $app.addEventListener('change', (e) => {
   if (ds.dset) {
     let v = e.target.value;
     if (ds.dset === 'post_call_hours') v = Math.max(0, Math.min(24, parseInt(v, 10) || 0));
-    else if (ds.dset === 'baby') v = v.split('\n').map((l) => l.trim()).filter(Boolean).map((l) => { const m = /^(\d{1,2})(?::(\d{2}))?\s*(am|pm|a|p)?\s+(.+)$/i.exec(l); if (!m) return { time: '', label: l.slice(0, 60) }; let h = +m[1]; const ap = (m[3] || '').toLowerCase(); if (ap.startsWith('p') && h < 12) h += 12; if (ap.startsWith('a') && h === 12) h = 0; return { time: `${String(h).padStart(2, '0')}:${m[2] || '00'}`, label: m[4].slice(0, 60) }; });
+    else if (ds.dset === 'nap_minutes') v = Math.max(15, Math.min(300, parseInt(v, 10) || 120));
     else if (!v) return render({ soft: true, keepFocus: '__none' });
     saveKeyed('day_settings', 1, { [ds.dset]: v });
     return render({ soft: true, keepFocus: '__none' });
