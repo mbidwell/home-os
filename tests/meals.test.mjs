@@ -83,3 +83,87 @@ test('cooking gear is mentioned when set, and left out when not', () => {
   assert.match(buildPrompt({ ...base, gear: ['oven', 'air fryer'] }), /We cook with: oven, air fryer\./);
   assert.doesNotMatch(buildPrompt(base), /cook with/);
 });
+
+import { parsePlan, sameTitle } from '../js/meals.js';
+const WEEK = ['2026-11-30', '2026-12-01', '2026-12-02', '2026-12-03', '2026-12-04', '2026-12-05', '2026-12-06'];
+
+test('the prompt asks for a PLAN block and RECIPE blocks', () => {
+  const p = buildPrompt({ range: 'x', kitchen: {}, low: [], out: [], days: [{ label: 'Mon', dinner: 'Tacos' }, { label: 'Thu', dinner: null }, { label: 'Sun', dinner: null }], recipes: [] });
+  assert.match(p, /\nPLAN\nThu: Meal name\nSun: Meal name/);
+  assert.match(p, /RECIPE: Title/);
+  assert.match(p, /\nEND$/);
+});
+
+test('a pasted reply fills days and brings new recipes', () => {
+  const reply = `Here are some ideas for your open nights!
+
+**PLAN**
+- **Thursday:** Sheet pan gnocchi (new)
+- Sun – Chicken tacos
+Wed lunch: Turkey wraps
+Fri: Pizza night
+
+RECIPE: Sheet pan gnocchi
+Ingredients
+- 1 lb gnocchi
+- 1 pint cherry tomatoes
+Steps
+1. Heat the oven to 425.
+2. Roast everything 20 minutes.
+END
+
+Enjoy!`;
+  const r = parsePlan(reply, WEEK);
+  assert.deepEqual(r.slots, [
+    { date: '2026-12-03', meal: 'dinner', title: 'Sheet pan gnocchi' },
+    { date: '2026-12-06', meal: 'dinner', title: 'Chicken tacos' },
+    { date: '2026-12-02', meal: 'lunch', title: 'Turkey wraps' },
+    { date: '2026-12-04', meal: 'dinner', title: 'Pizza night' }
+  ]);
+  assert.equal(r.recipes.length, 1);
+  assert.equal(r.recipes[0].title, 'Sheet pan gnocchi');
+  assert.equal(r.recipes[0].ingredients, '1 lb gnocchi\n1 pint cherry tomatoes');
+  assert.equal(r.recipes[0].steps, 'Heat the oven to 425.\nRoast everything 20 minutes.');
+});
+
+test('day lines outside a PLAN block still count when there is no PLAN line', () => {
+  assert.deepEqual(parsePlan('Mon: Soup\nnothing else', WEEK).slots, [{ date: '2026-11-30', meal: 'dinner', title: 'Soup' }]);
+  assert.deepEqual(parsePlan('just chatting, no plan here', WEEK).slots, []);
+});
+
+test('titles match saved recipes loosely', () => {
+  assert.ok(sameTitle('Chicken Tacos!', 'chicken tacos'));
+  assert.ok(!sameTitle('Chicken tacos', 'Fish tacos'));
+});
+
+test('favorites are called out in the prompt', () => {
+  const p = buildPrompt({ range: 'x', kitchen: {}, low: [], out: [], days: [], recipes: [{ title: 'Chili', favorite: true }, { title: 'Soup' }] });
+  assert.match(p, /Our favorites \(we’d happily have these again\): Chili\./);
+  assert.doesNotMatch(buildPrompt({ range: 'x', kitchen: {}, low: [], out: [], days: [], recipes: [{ title: 'Soup' }] }), /favorites/);
+});
+
+import { freezerHits, agoLabel } from '../js/meals.js';
+
+test('shift nights, on-call nights, recent dinners, and tags reach the prompt', () => {
+  const p = buildPrompt({ range: 'x', kitchen: {}, low: [], out: [],
+    days: [{ label: 'Thu', dinner: null, away: true }, { label: 'Fri', dinner: null, onCall: true }, { label: 'Sat', dinner: null }],
+    recipes: [{ title: 'Tacos', quick: true, kid_friendly: true }, { title: 'Stew' }], recent: ['Chili', 'Soup'] });
+  assert.match(p, /Shift nights: Thu\. One adult is at work over dinner/);
+  assert.match(p, /On call: Fri\./);
+  assert.match(p, /avoid repeating these\): Chili, Soup\./);
+  assert.match(p, /- Tacos \[quick, kids like it\]/);
+  assert.match(p, /- Stew\n/);
+});
+
+test('thaw: freezer items a recipe uses', () => {
+  assert.deepEqual(freezerHits('1.5 lb chicken thighs\n8 tortillas\n2 cups frozen peas', ['Chicken thigh', 'Frozen peas', 'Ice cream']), ['Chicken thigh', 'Frozen peas']);
+  assert.deepEqual(freezerHits('', ['Chicken']), []);
+});
+
+test('last had labels', () => {
+  assert.equal(agoLabel('2026-11-28', '2026-11-28'), 'today');
+  assert.equal(agoLabel('2026-11-27', '2026-11-28'), 'yesterday');
+  assert.equal(agoLabel('2026-11-20', '2026-11-28'), '8 days ago');
+  assert.equal(agoLabel('2026-11-07', '2026-11-28'), '3 weeks ago');
+  assert.equal(agoLabel('2026-08-28', '2026-11-28'), '3 months ago');
+});

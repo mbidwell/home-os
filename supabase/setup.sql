@@ -339,6 +339,12 @@ create table if not exists public.meal_plan (
 );
 create index if not exists meal_plan_date on public.meal_plan (date);
 
+-- A starred recipe: listed first, and Copy for AI asks for it again.
+alter table public.recipes add column if not exists favorite boolean not null default false;
+-- Tags: quick (30 minutes or less) and kids like it.
+alter table public.recipes add column if not exists quick boolean not null default false;
+alter table public.recipes add column if not exists kid_friendly boolean not null default false;
+
 -- Lunch planning is off until someone turns it on in Settings.
 alter table public.day_settings add column if not exists lunch_plan boolean not null default false;
 -- What the kitchen cooks with, for Copy for AI (e.g. {oven,air_fryer}).

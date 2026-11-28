@@ -453,3 +453,19 @@ button { background: none; border: 0; padding: 0; cursor: pointer; }
 .gear { display: flex; flex-wrap: wrap; gap: 8px; padding: 14px 0 10px; }
 .gear .pick { height: 44px; padding: 0 14px; font-size: 14px; }
 .gear .pick.on { background: var(--ink); border-color: var(--ink); color: var(--bg); }
+.hint.warnt { color: var(--err); }
+.fav.on { color: var(--acc); }
+.t-cozy .fav.on { color: var(--ink); }
+.favi { display: inline-flex; vertical-align: -2px; margin-right: 5px; color: var(--acc); }
+.t-cozy .favi { color: var(--ink); }
+.favi svg.i { width: 15px; height: 15px; fill: currentColor; }
+.bs h2 .fav { margin-left: auto; }
+.opt .favi svg.i, .favi svg.i { color: inherit; stroke-width: 2; }
+.pday .d .dtag { display: inline-block; margin-top: 4px; font: 700 10.5px var(--f-body); font-style: normal; padding: 2px 6px; border-radius: 6px; background: var(--s2); color: var(--ink2); }
+.opt > span small { display: block; font-weight: 500; font-size: 13px; color: var(--ink2); }
+.opt > span { padding: 8px 0; }
+.again { margin: 0 0 4px; }
+.again .pick.on { background: var(--ink); border-color: var(--ink); color: var(--bg); }
+.card.thaw { align-items: center; }
+.card.thaw > div:nth-child(2) { flex: 1; min-width: 0; }
+.card.thaw .mini { flex: none; }

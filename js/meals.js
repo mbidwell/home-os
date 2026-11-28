@@ -100,7 +100,7 @@ export function parsePasted(text) {
  * days: [{ label: 'Mon', dinner: 'Chicken tacos' | null, lunch?: string | null }]
  * recipes: [{ title, ingredients }]
  */
-export function buildPrompt({ range, kitchen, low, out, days, recipes, lunch = false, gear = [] }) {
+export function buildPrompt({ range, kitchen, low, out, days, recipes, lunch = false, gear = [], recent = [] }) {
   const L = [];
   L.push(`Help me plan ${lunch ? 'lunches and dinners' : 'dinners'} for ${range} for our family: two adults and two young kids. Keep weeknights simple; one-pot and sheet-pan meals are good options.`);
   if (gear.length) L.push(`We cook with: ${gear.join(', ')}. Recipes that use these are great.`);
@@ -120,16 +120,99 @@ export function buildPrompt({ range, kitchen, low, out, days, recipes, lunch = f
     L.push(`${word} planned: ${planned.length ? planned.join('; ') : 'none yet'}.`);
     if (open.length) L.push(`${word} still open: ${open.join(', ')}.`);
   }
+  const away = days.filter((d) => d.away).map((d) => d.label), call = days.filter((d) => d.onCall).map((d) => d.label);
+  if (away.length) L.push(`Shift nights: ${away.join(', ')}. One adult is at work over dinner, so those dinners are just for one adult and the kids: smaller and quick.`);
+  if (call.length) L.push(`On call: ${call.join(', ')}. One adult might get called in, so keep those dinners flexible.`);
+  if (recent.length) L.push(`Recent dinners (we like variety, so avoid repeating these): ${recent.join(', ')}.`);
   L.push('');
   if (recipes.length) {
+    const favs = recipes.filter((r) => r.favorite).map((r) => r.title);
+    if (favs.length) L.push(`Our favorites (we’d happily have these again): ${favs.join(', ')}.`);
     L.push('Recipes we already like:');
     for (const r of recipes) {
       const ing = ingredientLines(r.ingredients).map((x) => parseIngredient(x).name);
-      L.push(`- ${r.title}${ing.length ? ` (${ing.slice(0, 12).join(', ')})` : ''}`);
+      const tags = [r.quick && 'quick', r.kid_friendly && 'kids like it'].filter(Boolean);
+      L.push(`- ${r.title}${tags.length ? ` [${tags.join(', ')}]` : ''}${ing.length ? ` (${ing.slice(0, 12).join(', ')})` : ''}`);
     }
     L.push('');
   }
   L.push('Suggest meals for the open days that use what we have first, and say what we’d need to buy.');
-  L.push('For any new idea, write it as a recipe with a title line, then "Ingredients" (one per line), then "Steps", so I can paste it straight into my recipe box.');
+  L.push('');
+  L.push('Then end your answer with these two parts exactly, so my app can read them:');
+  L.push('1. A line that says PLAN, then one line per open day, like:');
+  L.push('PLAN');
+  const ex = days.filter((d) => !d.dinner).slice(0, 2).map((d) => d.label);
+  L.push(`${ex[0] || 'Mon'}: Meal name`);
+  if (lunch) L.push(`${ex[0] || 'Mon'} lunch: Meal name`);
+  L.push(`${ex[1] || 'Tue'}: Meal name`);
+  L.push('Use the exact title for any of our saved recipes.');
+  L.push('2. For each meal that isn’t one of our saved recipes, a recipe in this shape:');
+  L.push('RECIPE: Title');
+  L.push('Ingredients');
+  L.push('(one per line, with amounts)');
+  L.push('Steps');
+  L.push('(one per line)');
+  L.push('END');
   return L.join('\n');
+}
+
+const DAYS = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
+const clean = (s) => String(s || '').replace(/\*\*|__|`/g, '').replace(/^\s*(?:[-*•]|\d+[.)])\s*/, '').trim();
+export const sameTitle = (a, b) => {
+  const k = (x) => String(x || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+  return !!k(a) && k(a) === k(b);
+};
+
+/**
+ * Read an AI reply: the PLAN lines and any RECIPE blocks.
+ * days: the week's dates in order, Monday first ('YYYY-MM-DD').
+ * Returns { slots: [{ date, meal, title }], recipes: [{ title, ingredients, steps, notes, source_url }] }.
+ */
+export function parsePlan(text, days) {
+  const lines = String(text || '').replace(/\r/g, '').split('\n');
+  const byDay = {};
+  for (const d of days) byDay[DAYS[S.weekdayOf(d)]] = d;
+  const slots = [], recipes = [];
+  const start = lines.findIndex((l) => /^\s*(?:#+\s*)?\**\s*PLAN\b/i.test(l));
+  const dayRe = /^(sun|mon|tue|wed|thu|fri|sat)[a-z]*\.?(?:\s*\([^)]*\))?\s*(lunch|dinner)?\s*[:\-–—]\s*(.+)$/i;
+  for (let i = start < 0 ? 0 : start + 1; i < lines.length; i++) {
+    const l = clean(lines[i]);
+    if (/^RECIPE\s*:/i.test(l)) break;
+    const m = l.match(dayRe);
+    if (!m) { if (start >= 0 && slots.length && !l) continue; continue; }
+    const date = byDay[m[1].toLowerCase().slice(0, 3)];
+    let title = m[3].replace(/\s*[([](?:new|new recipe|saved|recipe below)[)\]]\s*/gi, ' ').replace(/\s+[-–—]\s+.*$/, '').replace(/[.]+$/, '').trim();
+    if (!date || !title) continue;
+    const meal = (m[2] || 'dinner').toLowerCase();
+    const j = slots.findIndex((x) => x.date === date && x.meal === meal);
+    if (j >= 0) slots[j].title = title.slice(0, 120); else slots.push({ date, meal, title: title.slice(0, 120) });
+  }
+  // RECIPE: Title ... END
+  let cur = null;
+  for (const raw of lines) {
+    const l = clean(raw);
+    const h = l.match(/^RECIPE\s*:\s*(.+)$/i);
+    if (h) { if (cur) recipes.push(cur); cur = [h[1]]; continue; }
+    if (!cur) continue;
+    if (/^END\b/i.test(l)) { recipes.push(cur); cur = null; continue; }
+    cur.push(raw);
+  }
+  if (cur) recipes.push(cur);
+  return { slots, recipes: recipes.map((r) => parsePasted(r.join('\n'))).filter((r) => r.title && r.title !== 'New recipe') };
+}
+
+/** Freezer items a recipe needs: the freezer names whose item shows up in its ingredients. */
+export function freezerHits(ingredientsText, freezerNames) {
+  const ing = ingredientLines(ingredientsText).map((l) => parseIngredient(l).name);
+  return freezerNames.filter((f) => ing.some((n) => inKitchen(n, [f])));
+}
+
+/** "today", "yesterday", "5 days ago", "3 weeks ago", "2 months ago". */
+export function agoLabel(date, today) {
+  const d = Math.round((S.parse(today) - S.parse(date)) / 86400000);
+  if (d <= 0) return 'today';
+  if (d === 1) return 'yesterday';
+  if (d < 14) return `${d} days ago`;
+  if (d < 60) return `${Math.round(d / 7)} weeks ago`;
+  return `${Math.round(d / 30)} months ago`;
 }

@@ -46,3 +46,15 @@ test('No shift only when later shifts are posted; never off a failed sync', () =
   assert.equal(dayStatus('2026-12-09', rows, [], { tz }).type, 'not_posted');
   assert.equal(dayStatus('2026-12-01', rows, [], { tz, syncOk: false }).type, 'unknown');
 });
+
+import { awayAtDinner } from '../js/day.js';
+test('away at dinner: evening shifts yes, day and overnight-start-late shifts no', () => {
+  const tz = 'America/New_York';
+  const sh = (from, to, kind = 'shift') => ({ kind, shift_type: kind === 'shift' ? 'working' : null, all_day: false, starts_at: from, ends_at: to });
+  const o = { dinner: '18:00', tz };
+  assert.ok(awayAtDinner('2026-11-27', [sh('2026-11-27T19:00:00Z', '2026-11-28T03:00:00Z')], [], o)); // 2-10 PM
+  assert.ok(!awayAtDinner('2026-11-26', [sh('2026-11-26T11:00:00Z', '2026-11-26T19:00:00Z')], [], o)); // 6 AM-2 PM
+  assert.ok(!awayAtDinner('2026-11-28', [sh('2026-11-29T02:00:00Z', '2026-11-29T11:00:00Z')], [], o)); // 9 PM-6 AM
+  assert.ok(awayAtDinner('2026-11-28', [sh('2026-11-28T21:30:00Z', '2026-11-29T02:30:00Z', 'event_shift')], [], o)); // event 4:30-9:30 PM
+  assert.ok(awayAtDinner('2026-11-28', [], [{ date: '2026-11-28', activated_from: '2026-11-28T22:00:00Z', activated_to: null }], o)); // activated at 5 PM
+});

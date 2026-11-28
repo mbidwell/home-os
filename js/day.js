@@ -68,3 +68,21 @@ export function dayStatus(date, rows, activations = [], opts = {}) {
   if (lastShift && lastShift >= date) return { ...base, type: 'no_shift', label: 'No shift' };
   return { ...base, type: 'not_posted', label: 'Schedule not posted' };
 }
+
+/**
+ * Away at dinner: a working shift, an event shift, or an activation that covers dinner time on `date`.
+ * dinner: 'HH:MM'. Counts if it overlaps the hour from dinner time on.
+ */
+export function awayAtDinner(date, rows, activations = [], { dinner = '18:00', tz } = {}) {
+  tz = tz || Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const [h, m] = String(dinner).split(':').map(Number);
+  const dh = h + (m || 0) / 60;
+  const covers = (from, to) => {
+    if (!from || !to || localDateOf(Date.parse(from), tz) !== date) return false;
+    const s = localHourOf(Date.parse(from), tz);
+    const e = localDateOf(Date.parse(to), tz) > date ? 24 : localHourOf(Date.parse(to), tz);
+    return s < dh + 1 && e > dh;
+  };
+  return rows.some((r) => !r.all_day && ((r.kind === 'shift' && r.shift_type === 'working') || r.kind === 'event_shift') && covers(r.starts_at, r.ends_at))
+    || activations.some((a) => a.date === date && covers(a.activated_from, a.activated_to || new Date(Date.parse(a.activated_from) + 12 * H).toISOString()));
+}
