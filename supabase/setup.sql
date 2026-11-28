@@ -315,6 +315,59 @@ grant select, insert, update on public.calendar_events, public.calendar_sync to 
 -- 7b. Toddler nap is a window (nap_start to nap_end, e.g. 1-4 PM) and a length; the actual nap is set per day.
 alter table public.day_settings add column if not exists nap_minutes int not null default 120 check (nap_minutes between 15 and 300);
 
+-- 9. Slice 5: recipes and the meal plan.
+create table if not exists public.recipes (
+  id          uuid primary key default gen_random_uuid(),
+  title       text not null check (char_length(btrim(title)) between 1 and 120),
+  ingredients text check (ingredients is null or char_length(ingredients) <= 8000), -- one per line
+  steps       text check (steps is null or char_length(steps) <= 12000),
+  source_url  text check (source_url is null or char_length(source_url) <= 500),
+  notes       text check (notes is null or char_length(notes) <= 2000),
+  created_at  timestamptz not null default now(),
+  updated_at  timestamptz not null default now(),
+  deleted_at  timestamptz
+);
+
+-- One row per meal slot ("2026-12-01:dinner"). Clearing a slot sets recipe_id and text to null.
+create table if not exists public.meal_plan (
+  slot       text primary key check (slot ~ '^\d{4}-\d{2}-\d{2}:(dinner|lunch)$'),
+  date       date not null,
+  meal       text not null check (meal in ('dinner', 'lunch')),
+  recipe_id  uuid references public.recipes (id),
+  text       text check (text is null or char_length(text) <= 120),
+  updated_at timestamptz not null default now()
+);
+create index if not exists meal_plan_date on public.meal_plan (date);
+
+-- Lunch planning is off until someone turns it on in Settings.
+alter table public.day_settings add column if not exists lunch_plan boolean not null default false;
+-- What the kitchen cooks with, for Copy for AI (e.g. {oven,air_fryer}).
+alter table public.day_settings add column if not exists appliances text[] not null default '{}';
+
+do $$
+declare t text;
+begin
+  foreach t in array array['recipes', 'meal_plan'] loop
+    execute format('alter table public.%I enable row level security', t);
+    execute format('create or replace trigger %I before update on public.%I for each row execute function public.touch_updated_at()', t || '_touch', t);
+    if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = t and policyname = 'members read') then
+      execute format('create policy "members read" on public.%I for select to authenticated using (public.is_household_member())', t);
+    end if;
+    if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = t and policyname = 'members add') then
+      execute format('create policy "members add" on public.%I for insert to authenticated with check (public.is_household_member())', t);
+    end if;
+    if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = t and policyname = 'members edit') then
+      execute format('create policy "members edit" on public.%I for update to authenticated using (public.is_household_member()) with check (public.is_household_member())', t);
+    end if;
+    execute format('revoke all on public.%I from anon', t);
+    execute format('grant select, insert, update on public.%I to authenticated', t);
+    if exists (select 1 from pg_publication where pubname = 'supabase_realtime')
+       and not exists (select 1 from pg_publication_tables where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = t) then
+      execute format('alter publication supabase_realtime add table public.%I', t);
+    end if;
+  end loop;
+end $$;
+
 -- 8. Calendar sync every 30 minutes (after deploying the calendar-sync function).
 --    Replace PROJECT-REF with your project's ref (the part before .supabase.co).
 --

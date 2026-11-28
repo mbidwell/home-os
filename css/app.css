@@ -418,3 +418,38 @@ button { background: none; border: 0; padding: 0; cursor: pointer; }
 .mini svg.i { width: 18px; height: 18px; }
 .picks2 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
 .picks2 .pick { height: 44px; }
+
+/* ---------- slice 5: meals and recipes ---------- */
+.ktabs { margin-bottom: 10px; }
+.wk { display: flex; align-items: center; justify-content: space-between; gap: 4px; margin: 4px 0 10px; }
+.wk > button { min-height: 48px; padding: 0 10px; border-radius: 14px; font: 700 14px var(--f-body); color: var(--ink2); white-space: nowrap; }
+.wk .wkn { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; color: var(--ink); }
+.wk .wkn b { font-size: 15.5px; }
+.wk .wkn small { font: 600 12px var(--f-body); color: var(--ink2); }
+.plan { padding: 2px 14px; }
+.pday { display: flex; align-items: flex-start; gap: 12px; padding: 6px 0; min-height: 60px; }
+.pday + .pday { border-top: 1px solid var(--line); }
+.pday .d { width: 50px; flex: none; font: 700 13px var(--f-body); color: var(--ink2); line-height: 1.25; padding-top: 9px; }
+.pday .d b { display: block; color: var(--ink); font-size: 15px; }
+.pday.today .d b { text-decoration: underline; text-decoration-thickness: 2px; text-underline-offset: 3px; }
+.pday.past { opacity: .55; }
+.pday .ms { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.pday .m { text-align: left; font-weight: 600; min-height: 48px; padding: 6px 0; border-radius: 10px; overflow-wrap: anywhere; display: flex; flex-direction: column; justify-content: center; align-items: flex-start; }
+.pday .m small { display: block; font-weight: 500; font-size: 13px; color: var(--ink2); }
+.pday .m.open { color: var(--ink2); }
+.pday .m.lu { font-size: 14.5px; min-height: 40px; flex-direction: row; align-items: center; justify-content: flex-start; flex-wrap: wrap; }
+.pday .m .ml { font: 700 11px var(--f-body); padding: 2px 6px; border-radius: 6px; background: var(--s2); color: var(--ink2); margin-right: 6px; }
+.two { display: flex; gap: 8px; margin-top: 14px; }
+.two .pri, .two .ghost { height: 54px; font-size: 15px; display: flex; align-items: center; justify-content: center; gap: 8px; }
+.two .pri { flex: 1.3; } .two .ghost { flex: 1; }
+.two .ghost svg.i, .two .pri svg.i { width: 20px; height: 20px; }
+.bs .foot2 { flex: none; padding-top: 10px; }
+.it.ing { cursor: pointer; }
+.ing .have { display: block; font: 600 12.5px var(--f-body); color: var(--ok); }
+.ing .have.lo { color: var(--ink2); }
+.src { display: inline-flex; align-items: center; gap: 6px; font: 700 14px var(--f-body); color: var(--ink2); margin: 8px 6px 0; min-height: 40px; text-decoration: none; }
+.src svg.i { width: 18px; height: 18px; }
+.prompt { margin: 0; background: var(--s1); border-radius: 18px; box-shadow: var(--sh-soft); padding: 14px 16px; font: 500 13.5px/1.55 var(--f-num); color: var(--ink); white-space: pre-wrap; overflow-wrap: anywhere; }
+.gear { display: flex; flex-wrap: wrap; gap: 8px; padding: 14px 0 10px; }
+.gear .pick { height: 44px; padding: 0 14px; font-size: 14px; }
+.gear .pick.on { background: var(--ink); border-color: var(--ink); color: var(--bg); }
