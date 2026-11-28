@@ -10,7 +10,7 @@ import * as A from './aisles.js';
 import * as R from './routines.js';
 import { parseStock } from './stock.js';
 
-const VERSION = '31';
+const VERSION = '32';
 const T = window.homeosTheme;
 const Q = new URLSearchParams(location.search);
 const PREVIEW = T.isPreview ? Q.get('preview') : null; // local screenshots only
@@ -2621,7 +2621,7 @@ function debugReadout() {
   document.body.appendChild(probe);
   const sab = probe.getBoundingClientRect().height; probe.remove();
   const nav = document.querySelector('.dockwrap');
-  el.textContent = `innerHeight ${innerHeight}\nvisualViewport ${Math.round(visualViewport?.height ?? 0)}\nsafe-area bottom ${sab}\nnav bottom ${nav ? Math.round(nav.getBoundingClientRect().bottom) : '-'}\nstandalone ${installed()}\nqueue ${state.queue.length}`;
+  el.textContent = `screen ${screen.height}  gap ${getComputedStyle(document.documentElement).getPropertyValue('--vgap') || '0'}\ninnerHeight ${innerHeight}\nvisualViewport ${Math.round(visualViewport?.height ?? 0)}\nsafe-area bottom ${sab}\nnav bottom ${nav ? Math.round(nav.getBoundingClientRect().bottom) : '-'}\nstandalone ${installed()}\nqueue ${state.queue.length}`;
 }
 addEventListener('resize', debugReadout);
 visualViewport?.addEventListener('resize', debugReadout);

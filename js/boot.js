@@ -61,3 +61,20 @@
   };
   apply();
 })();
+
+// iPhone home-screen apps sometimes get a window shorter than the screen (the bottom edge stops above the home bar),
+// which leaves a gap under the tab bar. When that happens, stretch the app down to the real bottom of the screen.
+(function () {
+  var standalone = (window.matchMedia && matchMedia('(display-mode: standalone)').matches) || navigator.standalone === true;
+  if (!standalone) return;
+  function fit() {
+    var portrait = innerHeight > innerWidth;
+    var screenH = portrait ? Math.max(screen.width, screen.height) : Math.min(screen.width, screen.height);
+    var gap = Math.round(screenH - innerHeight);
+    // Only the known short-window case: a small gap, never a keyboard (which shrinks the visual viewport instead).
+    document.documentElement.style.setProperty('--vgap', gap > 0 && gap < 80 ? gap + 'px' : '0px');
+  }
+  fit();
+  addEventListener('resize', fit);
+  addEventListener('orientationchange', function () { setTimeout(fit, 300); });
+})();
