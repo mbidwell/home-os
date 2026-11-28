@@ -470,3 +470,15 @@ button { background: none; border: 0; padding: 0; cursor: pointer; }
 .card.thaw > div:nth-child(2) { flex: 1; min-width: 0; }
 .card.thaw .mini { flex: none; }
 .meth { padding: 2px 0 12px; }
+.wkclear { display: flex; align-items: center; justify-content: center; gap: 6px; width: 100%; min-height: 48px; margin-top: 6px; }
+.wkclear svg.i { width: 16px; height: 16px; }
+.cardbtn { width: 100%; text-align: left; color: inherit; font: inherit; }
+.cardbtn > div:nth-child(2) { flex: 1; min-width: 0; }
+.cardbtn > svg.i { color: var(--ink2); flex: none; }
+.swap { margin-bottom: 14px; }
+.swap .in { margin: 0; }
+.swap .two { margin-top: 8px; }
+.favs, .wants { padding: 2px 0 12px; }
+.favs .pick { display: inline-flex; align-items: center; }
+.wants .pick { height: 38px; font-size: 13px; }
+.wants .pick.on { background: var(--ink); border-color: var(--ink); color: var(--bg); }

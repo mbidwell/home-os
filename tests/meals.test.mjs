@@ -188,3 +188,30 @@ test('a pasted recipe keeps its method, and the prompt asks for one', () => {
   assert.match(p, /RECIPE: Title\nMethod: one of stove, oven, sheet pan/);
   assert.match(p, /- Chili \[slow cooker, quick\]/);
 });
+
+import { buildSwapPrompt } from '../js/meals.js';
+test('swap prompt asks for one meal for that day, with the request', () => {
+  const p = buildSwapPrompt({ day: 'Thu', current: 'Chili', want: 'something lighter, maybe fish', kitchen: { Fridge: ['Yogurt'] }, low: [], out: [], recipes: [{ title: 'Tacos' }], away: true });
+  assert.match(p, /different dinner for Thu/);
+  assert.match(p, /We had planned Chili/);
+  assert.match(p, /What sounds good: something lighter, maybe fish\./);
+  assert.match(p, /smaller and quick/);
+  assert.match(p, /\nPLAN\nThu: Meal name\n/);
+  assert.match(p, /Our saved recipes: Tacos\./);
+  // and the reply reads back as one slot
+  const r = parsePlan('Ideas...\nPLAN\nThu: Lemon salmon\nRECIPE: Lemon salmon\nMethod: sheet pan\nIngredients\n2 salmon fillets\nSteps\nBake.\nEND', WEEK);
+  assert.deepEqual(r.slots, [{ date: '2026-12-03', meal: 'dinner', title: 'Lemon salmon' }]);
+  assert.equal(r.recipes[0].method, 'sheet_pan');
+});
+
+test('a decimal amount is not mistaken for list numbering', () => {
+  assert.deepEqual(ingredientLines('1.5 lb chicken thighs\n2. 1 onion\n0.5 cup rice'), ['1.5 lb chicken thighs', '1 onion', '0.5 cup rice']);
+  assert.deepEqual(parseIngredient(ingredientLines('1.5 lb chicken thighs')[0]), { name: 'chicken thighs', qty: '1.5 lb' });
+});
+
+import { missingFor } from '../js/meals.js';
+test('auto-add: only what is missing, never basics', () => {
+  const ing = '1.5 lb chicken thighs\n8 tortillas\n1 cup shredded cheese\nSalt and pepper\n2 limes\nOlive oil, to taste\n2 limes';
+  assert.deepEqual(missingFor(ing, ['Shredded cheese', 'Chicken thigh'], ['Tortillas']), [{ name: 'Limes', qty: '2' }]);
+  assert.deepEqual(missingFor('', [], []), []);
+});

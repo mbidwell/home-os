@@ -21,7 +21,7 @@ const QTY_RE = new RegExp(String.raw`^(?:about\s+)?${NUM}(?:\s*(?:-|–|to)\s*${
 /** Ingredient lines from pasted text: bullets and numbering removed, blanks and section headers ("For the sauce:") skipped. */
 export function ingredientLines(text) {
   return String(text || '').split(/\r?\n/)
-    .map((l) => l.replace(/^\s*(?:[-*•·▢□◦]|\d+[.)])\s*/, '').trim())
+    .map((l) => l.replace(/^\s*(?:[-*•·▢□◦]|\d+[.)](?!\d))\s*/, '').trim())
     .filter((l) => l && !/:$/.test(l) && !/^ingredients?$/i.test(l));
 }
 
@@ -96,7 +96,7 @@ export function parsePasted(text) {
     if (h) { part = h; continue; }
     if (!out.title && !part) { out.title = l.replace(/^(?:recipe|title)\s*:\s*/i, '').replace(/[:.]$/, ''); continue; }
     if (part === 'ingredients') out.ingredients.push(...ingredientLines(l));
-    else if (part === 'steps') out.steps.push(l.replace(/^\s*(?:[-*•]|\d+[.)]|step \d+[:.]?)\s*/i, ''));
+    else if (part === 'steps') out.steps.push(l.replace(/^\s*(?:[-*•]|\d+[.)](?!\d)|step \d+[:.]?)\s*/i, ''));
     else if (part) out.notes.push(l);
     else out.notes.push(l); // text between the title and the first heading
   }
@@ -174,7 +174,7 @@ export function buildPrompt({ range, kitchen, low, out, days, recipes, lunch = f
 }
 
 const DAYS = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
-const clean = (s) => String(s || '').replace(/\*\*|__|`/g, '').replace(/^\s*(?:[-*•]|\d+[.)])\s*/, '').trim();
+const clean = (s) => String(s || '').replace(/\*\*|__|`/g, '').replace(/^\s*(?:[-*•]|\d+[.)](?!\d))\s*/, '').trim();
 export const sameTitle = (a, b) => {
   const k = (x) => String(x || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
   return !!k(a) && k(a) === k(b);
@@ -232,4 +232,54 @@ export function agoLabel(date, today) {
   if (d < 14) return `${d} days ago`;
   if (d < 60) return `${Math.round(d / 7)} weeks ago`;
   return `${Math.round(d / 30)} months ago`;
+}
+
+/**
+ * Ask for one replacement meal. want: what sounds good ("something lighter", "Mexican").
+ * Shares the kitchen and recipe context with buildPrompt, and asks for the same PLAN / RECIPE ending.
+ */
+export function buildSwapPrompt({ day, meal = 'dinner', current, want, kitchen, low, out, recipes, gear = [], away = false, recent = [] }) {
+  const L = [];
+  const what = meal === 'lunch' ? 'lunch' : 'dinner';
+  L.push(`Help me pick a different ${what} for ${day} for our family: two adults and two young kids.${current ? ` We had planned ${current}, but we’d like something else.` : ''}`);
+  if (want && want.trim()) L.push(`What sounds good: ${want.trim()}.`);
+  if (away) L.push('One adult is at work over dinner that night, so it’s just for one adult and the kids: smaller and quick.');
+  if (gear.length) L.push(`Appliances we have: ${gear.join(', ')}. Only use these.`);
+  L.push('');
+  const places = Object.entries(kitchen).filter(([, xs]) => xs.length);
+  if (places.length) { L.push('In the kitchen now:'); for (const [where, xs] of places) L.push(`${where}: ${xs.join(', ')}`); }
+  if (low.length) L.push(`Running low: ${low.join(', ')}`);
+  if (out.length) L.push(`Out: ${out.join(', ')}`);
+  if (recent.length) L.push(`Recent dinners (avoid repeating): ${recent.join(', ')}.`);
+  if (recipes.length) L.push(`Our saved recipes: ${recipes.map((r) => r.title).join(', ')}.`);
+  L.push('');
+  L.push('Give me two or three ideas, then pick the best one and end your answer exactly like this, so my app can read it:');
+  L.push('PLAN');
+  L.push(`${day}${meal === 'lunch' ? ' lunch' : ''}: Meal name`);
+  L.push('If it isn’t one of our saved recipes, add:');
+  L.push('RECIPE: Title');
+  L.push(`Method: one of ${METHODS.map((m) => m[1].toLowerCase()).join(', ')}`);
+  L.push('Ingredients');
+  L.push('(one per line, with amounts)');
+  L.push('Steps');
+  L.push('(one per line)');
+  L.push('END');
+  return L.join('\n');
+}
+
+// Things nearly every kitchen has that aren't worth a grocery line.
+const BASICS = ['salt', 'pepper', 'black pepper', 'salt and pepper', 'kosher salt', 'water', 'ice', 'cooking spray'];
+
+/** What a recipe needs that isn't in the kitchen or already on the list: [{ name, qty }], names capitalized. */
+export function missingFor(ingredientsText, haveNames, listedNames) {
+  const out = [];
+  for (const line of ingredientLines(ingredientsText)) {
+    const p = parseIngredient(line);
+    const n = p.name.toLowerCase().replace(/\s*\(.*\)$/, '').trim();
+    if (!n || BASICS.includes(n) || /\bto taste\b/i.test(line)) continue;
+    if (inKitchen(p.name, haveNames) || listedNames.some((l) => sameTitle(l, p.name) || inKitchen(p.name, [l]))) continue;
+    if (out.some((o) => sameTitle(o.name, p.name))) continue;
+    out.push({ name: p.name.charAt(0).toUpperCase() + p.name.slice(1), qty: p.qty });
+  }
+  return out;
 }

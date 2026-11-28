@@ -346,6 +346,10 @@ alter table public.recipes add column if not exists quick boolean not null defau
 alter table public.recipes add column if not exists kid_friendly boolean not null default false;
 -- How it's cooked: stove, oven, sheet_pan, air_fryer, pressure_cooker, slow_cooker, grill, microwave, no_cook.
 alter table public.recipes add column if not exists method text check (method is null or char_length(method) <= 30);
+-- Grocery items added for a planned meal remember which one ("2026-12-01:dinner"), so clearing the meal takes them back.
+alter table public.grocery_items add column if not exists from_slot text check (from_slot is null or char_length(from_slot) <= 20);
+-- Planning a recipe adds what it needs to grocery (Settings can turn this off).
+alter table public.day_settings add column if not exists auto_grocery boolean not null default true;
 
 -- Lunch planning is off until someone turns it on in Settings.
 alter table public.day_settings add column if not exists lunch_plan boolean not null default false;

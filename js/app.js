@@ -5,7 +5,7 @@ import * as S from './schedule.js';
 import * as D from './day.js';
 import * as M from './meals.js';
 
-const VERSION = '8';
+const VERSION = '11';
 const T = window.homeosTheme;
 const Q = new URLSearchParams(location.search);
 const PREVIEW = T.isPreview ? Q.get('preview') : null; // local screenshots only
@@ -49,7 +49,7 @@ const state = {
   error: null
 };
 // Screen-only state (not synced).
-const ui = { sheet: null, edit: false, newGroup: null, loc: ls.get(K.loc, 'fridge'), choreTab: ls.get(K.choreTab, 'chores'), who: ls.get(K.who, 'all'), showLater: false, showDone: false, howto: null, taskCat: 'House', resetCount: null, calTab: 'week', ktab: ls.get(K.ktab, 'stock'), week: 0, ingr: {}, plan: null, planErr: null };
+const ui = { sheet: null, edit: false, newGroup: null, loc: ls.get(K.loc, 'fridge'), choreTab: ls.get(K.choreTab, 'chores'), who: ls.get(K.who, 'all'), showLater: false, showDone: false, howto: null, taskCat: 'House', resetCount: null, calTab: 'week', ktab: ls.get(K.ktab, 'stock'), week: 0, ingr: {}, ingrDays: null, plan: null, planErr: null };
 
 /* ---------- constants ---------- */
 const STORES = [['costco', 'Costco'], ['wegmans', 'Wegmans'], ['publix', 'Publix'], ['harris_teeter', 'Harris Teeter']];
@@ -140,7 +140,7 @@ if (PREVIEW) {
   state.rows.recipes = [
     rc('r1', 'Chicken tacos', '1.5 lb chicken thighs\n8 small tortillas\n1 cup shredded cheese\n2 limes\n1 onion\nTaco seasoning',
       { favorite: true, quick: true, kid_friendly: true, method: 'stove', source_url: 'https://example.com/chicken-tacos', steps: 'Season the chicken and sear 6 minutes a side.\nRest, then slice thin.\nWarm the tortillas; top with chicken, cheese, onion, and lime.', notes: 'Kids like it without onion.' }),
-    rc('r2', 'Sheet pan salmon', '4 salmon fillets\n1 lb green beans\n2 tbsp olive oil\n1 lemon\nSalt', { quick: true, method: 'sheet_pan' }),
+    rc('r2', 'Sheet pan salmon', '4 salmon fillets\n1 lb green beans\n2 tbsp olive oil\n1 lemon\nSalt', { quick: true, favorite: true, method: 'sheet_pan' }),
     rc('r3', 'Slow cooker chili', '1 lb ground beef\n1 (15 oz) can black beans\n1 (15 oz) can kidney beans\n1 can crushed tomatoes\n1 onion\n2 tbsp chili powder\nShredded cheese', { method: 'slow_cooker' }),
     rc('r4', 'Pasta with peas', '1 lb pasta\n2 cups frozen peas\n2 tbsp butter\nParmesan')
   ];
@@ -160,7 +160,8 @@ if (PREVIEW) {
       { date: S.addDays(wk0, 6), meal: 'dinner', title: 'Chicken tacos', cur: '', on: true }],
       recipes: [{ title: 'Sheet pan gnocchi', method: 'sheet_pan', ingredients: '1 lb gnocchi\n1 pint cherry tomatoes\n1 red onion\n2 tbsp olive oil\nItalian sausage', steps: 'Heat the oven to 425.\nToss everything on a sheet pan.\nRoast 20 minutes.', notes: null, source_url: null, on: true }] };
   }
-  if (Q.get('msheet')) ui.sheet = Q.get('msheet') === 'recipe' ? { type: 'recipe', id: 'r1' } : Q.get('msheet') === 'meal' ? { type: 'meal', slot: M.slotOf(S.addDays(wk0, 3)) } : { type: Q.get('msheet') };
+  if (Q.get('msheet') === 'ingrsoon') { ui.ingrDays = [0, 1, 2].map((i) => S.addDays(today, i)); ui.sheet = { type: 'ingr' }; }
+  else if (Q.get('msheet')) ui.sheet = Q.get('msheet') === 'recipe' ? { type: 'recipe', id: 'r1' } : Q.get('msheet') === 'meal' ? { type: 'meal', slot: M.slotOf(S.addDays(today, 1)) } : { type: Q.get('msheet') };
   if (Q.get('cal')) ui.calTab = Q.get('cal');
   if (Q.get('oncall')) state.rows.calendar_events[0] = ev('s1', { kind: 'shift', shift_type: 'on_call', all_day: true, start_date: today, end_date: today });
   if (Q.get('tab')) ui.choreTab = Q.get('tab');
@@ -611,6 +612,32 @@ function kitchenView() { return ui.ktab === 'meals' ? mealsView() : ui.ktab === 
 
 const recipes = () => live('recipes').sort((a, b) => (!!b.favorite - !!a.favorite) || a.title.localeCompare(b.title)); // starred first
 const lunchOn = () => !!daySet().lunch_plan;
+const autoGrocery = () => daySet().auto_grocery !== false; // on unless turned off
+// Plan a meal. When a recipe goes on a day (today or later), what it needs that the kitchen doesn't have goes on the
+// grocery list, tagged with the day. Clearing or swapping the meal takes back what it added that isn't bought yet.
+function setMeal(slot, { recipe_id = null, text = null }) {
+  const [date, meal] = slot.split(':');
+  const before = findRow('meal_plan', slot);
+  if (before && before.recipe_id !== recipe_id) unplanGrocery(slot);
+  saveKeyed('meal_plan', slot, { date, meal, recipe_id, text });
+  if (recipe_id && autoGrocery() && date >= todayStr()) addForMeal(slot);
+  if (before && before.recipe_id && before.recipe_id !== recipe_id) topUpGrocery();
+}
+function addForMeal(slot) {
+  const m = mealOf(slot), r = m && m.recipe_id ? findRow('recipes', m.recipe_id) : null;
+  if (!r || r.deleted_at) return 0;
+  const have = pantry().filter((p) => p.status === 'have').map((p) => p.name);
+  const need = M.missingFor(r.ingredients, have, groceryOpen().map((g) => g.name));
+  for (const x of need) addGrocery(x.name, { note: [x.qty, `for ${r.title}`].filter(Boolean).join(' · '), from_slot: slot });
+  return need.length;
+}
+function unplanGrocery(slot) { groceryOpen().filter((g) => g.from_slot === slot).forEach((g) => removeRow('grocery_items', g.id)); }
+// After taking items back, re-add anything another planned meal still needs.
+function topUpGrocery() {
+  if (!autoGrocery()) return;
+  const td = todayStr(), end = S.addDays(td, 14);
+  live('meal_plan').filter((m) => m.recipe_id && m.date >= td && m.date <= end).forEach((m) => addForMeal(m.slot));
+}
 const GEAR = [['stove', 'Stove'], ['oven', 'Oven'], ['microwave', 'Microwave'], ['air_fryer', 'Air fryer'], ['pressure_cooker', 'Pressure cooker'], ['slow_cooker', 'Slow cooker'], ['grill', 'Grill']];
 const gear = () => (Array.isArray(daySet().appliances) ? daySet().appliances : []);
 const mealOf = (slot) => { const m = findRow('meal_plan', slot); return m && (m.recipe_id || m.text) ? m : null; };
@@ -645,6 +672,22 @@ function thawFor(date) {
   }
   return out;
 }
+// The next three days, for shopping ahead.
+const soonDays = () => [0, 1, 2].map((i) => S.addDays(todayStr(), i));
+function shopCard() {
+  const groups = ingrGroups(soonDays()), need = groups.flatMap((g) => g.items.filter((x) => !x.listed && !x.kit));
+  if (!need.length) return '';
+  const titles = groups.filter((g) => g.items.some((x) => !x.listed && !x.kit)).map((g) => g.r.title);
+  return `<button class="card press rise d1 cardbtn" data-act="shopsoon"><div class="ic">${ic('cart')}</div><div><b>Shop for the next few days</b><small>${plural(need.length, 'thing')} for ${esc(titles.length > 2 ? `${titles.slice(0, 2).join(', ')} and more` : titles.join(' and '))} ${need.length === 1 ? 'isn’t' : 'aren’t'} on the list yet.</small></div>${ic('chev')}</button>`;
+}
+function planNextCard(td) {
+  const wd = S.weekdayOf(td);
+  if (!(wd >= 4 || wd === 0)) return ''; // Thursday through Sunday
+  const w0 = S.addDays(M.weekStart(td), 7), days = [0, 1, 2, 3, 4, 5, 6].map((i) => S.addDays(w0, i));
+  const n = days.filter((d) => mealOf(M.slotOf(d))).length;
+  if (n >= 4) return '';
+  return `<button class="card press rise d1 cardbtn" data-act="plannext"><div class="ic">${ic('cal')}</div><div><b>Plan next week’s dinners</b><small>${n ? `${n} of 7 planned` : 'Nothing planned yet'} for ${weekRange(days)}. Plan early so there’s time to shop.</small></div>${ic('chev')}</button>`;
+}
 function thawCard(td) {
   const morning = +nowHM().slice(0, 2) < 14;
   const today = morning ? thawFor(td) : [], tom = thawFor(S.addDays(td, 1));
@@ -655,6 +698,8 @@ function thawCard(td) {
   return `<div class="card thaw rise d1"><div class="ic">${ic('snow')}</div><div><b>${today.length ? 'Thaw now' : 'Thaw tonight'}</b><small>Move ${esc(what.toLowerCase())} to the fridge for ${first.when} ${esc(first.recipe.title)}.</small></div><button class="mini press go" data-act="thawed" data-ids="${all.map((x) => x.item.id).join(',')}">Moved it</button></div>`;
 }
 
+// Planned meals that "Clear the week" would clear: today on (past days stay, for "last had").
+const clearable = () => { const td = todayStr(), days = weekDays().filter((d) => d >= td); return live('meal_plan').filter((m) => days.includes(m.date) && (m.recipe_id || m.text)); };
 function mealsView() {
   const days = weekDays(), td = todayStr(), lunch = lunchOn();
   const planned = days.filter((d) => mealOf(M.slotOf(d))).length;
@@ -674,6 +719,7 @@ function mealsView() {
     <div class="list plan rise d1">${rows}</div>
     <div class="two rise d2"><button class="pri press" data-act="iopen">${ic('cart')}Ingredients to grocery</button><button class="ghost press" data-act="aiopen">${ic('copy')}Copy for AI</button></div>
     <button class="more press rise d2" data-act="planopen">${ic('plus')}Paste the AI’s plan</button>
+    ${clearable().length ? `<button class="clear wkclear press" data-act="wkclear">${ic('x')}Clear ${ui.week ? 'that week' : 'the rest of this week'} (${plural(clearable().length, 'meal')})</button>` : ''}
   </main>
   ${dock('kitchen')}`;
 }
@@ -694,16 +740,25 @@ function recipesView() {
   ${dock('kitchen')}`;
 }
 
+const WANTS = ['Lighter', 'Comfort food', 'Quick', 'Pasta', 'Chicken', 'Mexican', 'Asian', 'Soup', 'Kid favorite', 'Something new'];
 function mealSheet(slot) {
   const [date, meal] = String(slot).split(':');
   if (!date || !meal) return '';
   const m = findRow('meal_plan', slot) || {};
   const rs = recipes();
+  const favs = rs.filter((r) => r.favorite && r.id !== m.recipe_id).sort((a, b) => lastHad(a.id).localeCompare(lastHad(b.id))); // longest ago first
   return `<h2>${shortDay(date, { weekday: 'short', month: 'short', day: 'numeric' })} · ${meal === 'lunch' ? 'Lunch' : 'Dinner'}<button class="lnk" data-act="close">Done</button></h2>
     <form class="qa slim" data-form="mtext" autocomplete="off" style="margin:0 0 6px"><div class="row">
       <input class="fld" name="name" type="text" placeholder="Type it (leftovers, pizza night…)" value="${esc(m.recipe_id ? '' : m.text || '')}" maxlength="120" enterkeyhint="done" aria-label="Meal">
       <button class="add press" type="submit" aria-label="Save">${ic('check')}</button></div></form>
     <div class="scroll">
+      ${favs.length ? `${sec('Swap with a favorite')}<div class="gear favs">${favs.map((r) => `<button class="pick press" data-act="mpick" data-slot="${slot}" data-id="${r.id}"><span class="favi">${ic('star')}</span>${esc(r.title)}</button>`).join('')}</div>` : ''}
+      ${date >= todayStr() ? `${sec('Or ask AI for something else')}
+      <form class="swap" data-form="swap" autocomplete="off">
+        <p class="hint" style="margin:0 4px 8px">Tell the AI what kind of meal you want: tap a few, or type your own.</p>
+        <div class="gear wants">${WANTS.map((w) => `<button type="button" class="pick press" data-act="wantadd" data-v="${w}">${w}</button>`).join('')}</div>
+        <input class="in" name="want" type="text" placeholder="What sounds good? Lighter, Mexican, pasta…" maxlength="160" enterkeyhint="done" aria-label="What sounds good">
+        <div class="two"><button type="button" class="pri press" data-act="swapcopy" data-slot="${slot}">${ic('copy')}Copy for AI</button><button type="button" class="ghost press" data-act="planopen">${ic('plus')}Paste the reply</button></div></form>` : ''}
       ${rs.length ? `${sec('Or pick a recipe', rs.length)}<div class="list opts">${rs.map((r) => `<button class="opt press${m.recipe_id === r.id ? ' on' : ''}" data-act="mpick" data-slot="${slot}" data-id="${r.id}"><span>${r.favorite ? `<span class="favi">${ic('star')}</span>` : ''}${esc(r.title)}<small>${[tagLine(r), hadLine(r)].filter(Boolean).join(' · ')}</small></span>${m.recipe_id === r.id ? ic('check') : ''}</button>`).join('')}</div>`
         : '<p class="empty">No recipes yet. Add them under Recipes, or type a meal above.</p>'}
       ${m.recipe_id || m.text ? `<button class="ghost press" data-act="mclear" data-slot="${slot}">Clear ${meal}</button>` : ''}
@@ -737,9 +792,9 @@ function recipeSheet(r) {
 }
 
 // Ingredients from the recipes planned for the rest of the shown week (the whole week if it's ahead).
-function ingrGroups() {
+function ingrGroups(only) {
   const td = todayStr();
-  const days = weekDays().filter((d) => ui.week > 0 || d >= td);
+  const days = only || ui.ingrDays || weekDays().filter((d) => ui.week > 0 || d >= td);
   const have = pantry().filter((p) => p.status === 'have').map((p) => p.name);
   const low = pantry().filter((p) => p.status === 'low').map((p) => p.name);
   const seen = new Set(), groups = [];
@@ -768,22 +823,38 @@ function ingrSheet() {
   if (!groups.length) return `<h2>Add to grocery<button class="lnk" data-act="close">Done</button></h2>
     <p class="empty">No recipes planned ${ui.week > 0 ? 'that week' : ui.week < 0 ? 'that week from today on' : 'for the rest of this week'}. Typed meals, like “pizza night”, don’t have ingredients.</p>`;
   return `<h2>Add to grocery<button class="lnk" data-act="close">Cancel</button></h2>
-    <p class="hint" style="margin-top:0">From ${plural(groups.length, 'recipe')} ${ui.week > 0 ? 'that week' : 'this week'}. Uncheck anything you already have.</p>
+    <p class="hint" style="margin-top:0">From ${plural(groups.length, 'recipe')} ${ui.ingrDays ? 'in the next few days' : ui.week > 0 ? 'that week' : 'this week'}. Uncheck anything you already have.</p>
     <div class="scroll">${groups.map((g) => `${sec(esc(g.r.title), g.items.length)}<div class="list">${g.items.map(row).join('')}</div>`).join('')}</div>
     <div class="foot2"><button class="pri press" data-act="iadd"${n ? '' : ' disabled'}>${ic('cart')}${n ? `Add ${n} to grocery` : 'Nothing checked'}</button></div>`;
 }
 
-function aiPrompt() {
-  const days = weekDays(), names = (f) => pantry().filter(f).map((p) => p.name).sort((a, b) => a.localeCompare(b));
+// What every AI message shares: the kitchen, recent dinners before `from`, saved recipes, appliances.
+function aiContext(from) {
+  const names = (f) => pantry().filter(f).map((p) => p.name).sort((a, b) => a.localeCompare(b));
   const kitchen = {};
   for (const [k, l] of LOCS) kitchen[l] = names((p) => p.location === k && p.status === 'have');
-  return M.buildPrompt({
-    range: weekRange(days), kitchen, low: names((p) => p.status === 'low'), out: names((p) => p.status === 'out'),
-    days: days.map((d) => ({ label: shortDay(d, { weekday: 'short' }), dinner: mealTitle(mealOf(M.slotOf(d))) || null, lunch: mealTitle(mealOf(M.slotOf(d, 'lunch'))) || null, away: awayOn(d), onCall: onCallOn(d) })),
-    recent: [...new Set(live('meal_plan').filter((m) => m.meal === 'dinner' && m.date < days[0] && m.date >= S.addDays(days[0], -14)).sort((a, b) => b.date.localeCompare(a.date)).map((m) => mealTitle(m)).filter(Boolean))],
-    recipes: recipes().slice(0, 40), lunch: lunchOn(),
+  return {
+    kitchen, low: names((p) => p.status === 'low'), out: names((p) => p.status === 'out'),
+    recent: [...new Set(live('meal_plan').filter((m) => m.meal === 'dinner' && m.date < from && m.date >= S.addDays(from, -14)).sort((a, b) => b.date.localeCompare(a.date)).map((m) => mealTitle(m)).filter(Boolean))],
+    recipes: recipes().slice(0, 40),
     gear: GEAR.filter(([k]) => gear().includes(k)).map(([, l]) => l.toLowerCase())
+  };
+}
+function aiPrompt() {
+  const days = weekDays();
+  return M.buildPrompt({
+    ...aiContext(days[0]), range: weekRange(days), lunch: lunchOn(),
+    days: days.map((d) => ({ label: shortDay(d, { weekday: 'short' }), dinner: mealTitle(mealOf(M.slotOf(d))) || null, lunch: mealTitle(mealOf(M.slotOf(d, 'lunch'))) || null, away: awayOn(d), onCall: onCallOn(d) }))
   });
+}
+function swapPrompt(slot, want) {
+  const [date, meal] = slot.split(':');
+  return M.buildSwapPrompt({ ...aiContext(date), day: shortDay(date, { weekday: 'short' }), meal, current: mealTitle(mealOf(slot)) || null, want, away: meal === 'dinner' && awayOn(date) });
+}
+async function copySwap(slot, want, btn) {
+  const text = swapPrompt(slot, want);
+  try { await navigator.clipboard.writeText(text); btn.classList.add('jelly'); btn.innerHTML = `${ic('check')}Copied`; }
+  catch { prompt('Copy this:', text); }
 }
 
 function aiSheet() {
@@ -811,6 +882,7 @@ function readPlan(text) {
     const keep = cur && M.sameTitle(cur, x.title);
     return { ...x, cur: keep ? '' : cur, on: !cur && !keep, same: keep };
   }).filter((x) => !x.same && (x.meal === 'dinner' || lunchOn()));
+  if (ss.length === 1) ss[0].on = true; // a one-meal swap means "replace it"
   return { slots: ss, recipes: rs };
 }
 
@@ -840,7 +912,7 @@ function applyPlan() {
   const made = p.recipes.filter((r) => r.on).map(({ on, ...r }) => insertRow('recipes', r));
   for (const x of p.slots.filter((s2) => s2.on)) {
     const r = [...recipes(), ...made].find((y) => M.sameTitle(y.title, x.title));
-    saveKeyed('meal_plan', M.slotOf(x.date, x.meal), { date: x.date, meal: x.meal, recipe_id: r ? r.id : null, text: r ? null : x.title });
+    setMeal(M.slotOf(x.date, x.meal), { recipe_id: r ? r.id : null, text: r ? null : x.title });
   }
 }
 
@@ -1217,7 +1289,7 @@ function homeView() {
     ${syncWarn()}
     ${setup}
     ${shiftHero(td)}
-    ${thawCard(td)}
+    ${thawCard(td)}${shopCard()}${planNextCard(td)}
     ${resetCard()}
     ${sec('Today')}${tlHtml(td, true)}
     <div style="margin-top:14px">${todayCards(td)}</div>
@@ -1473,6 +1545,7 @@ function settingsView() {
       <label class="fl">Dinner<input type="time" class="dt sm" data-dset="dinner" value="${hm(daySet().dinner)}"></label>
       <label class="fl">Bed<input type="time" class="dt sm" data-dset="bed" value="${hm(daySet().bed)}"></label>
       <button class="fl swr" role="switch" aria-checked="${lunchOn()}" data-act="lunchplan">Plan lunch too<span class="tg" aria-hidden="true"></span></button>
+      <button class="fl swr" role="switch" aria-checked="${autoGrocery()}" data-act="autogro">Add what meals need to grocery<span class="tg" aria-hidden="true"></span></button>
       <label class="fl">Post call<span class="pair"><input type="number" class="num" min="0" max="24" inputmode="numeric" data-dset="post_call_hours" value="${daySet().post_call_hours}"><span class="evl">hours</span></span></label>
     </div>
     <p class="gt" style="margin-top:18px">Cooking with</p>
@@ -1635,11 +1708,11 @@ $app.addEventListener('submit', async (e) => {
     render({ soft: true, keepFocus: '.bs [data-rf="ingredients"]' });
     return;
   }
+  if (kind === 'swap') { const b = f.querySelector('[data-act="swapcopy"]'); if (b) copySwap(b.dataset.slot, f.want.value, b); return; }
   if (kind === 'mtext') {
     const slot = ui.sheet?.slot, text = f.name.value.trim().slice(0, 120);
     if (!slot) return;
-    const [date, meal] = slot.split(':');
-    saveKeyed('meal_plan', slot, { date, meal, recipe_id: null, text: text || null });
+    setMeal(slot, { text: text || null });
     ui.sheet = null;
     render({ soft: true, keepFocus: '__none', fx: [[`[data-slot="${slot}"]`, 'pop']] });
     return;
@@ -1733,7 +1806,7 @@ $app.addEventListener('click', (e) => {
     case 'newgroup': ui.newGroup = t.dataset.g; return soft();
     case 'addstaple': { const x = findRow('staples', id); if (x) addGrocery(x.name, { store: x.store || (x.list === 'costco' ? 'costco' : null) }); return soft([[`[data-sid="${id}"]`, 'pop']]); }
     case 'delstaple': removeRow('staples', id); return soft();
-    case 'close': ui.sheet = null; ui.edit = false; return soft();
+    case 'close': ui.sheet = null; ui.edit = false; ui.ingrDays = null; return soft();
     // kitchen
     case 'loc': ui.loc = t.dataset.loc; ls.set(K.loc, ui.loc); return soft();
     case 'pstat': updateRow('pantry_items', id, { status: t.dataset.s }); return soft([[`[data-act="pstat"][data-id="${id}"][data-s="${t.dataset.s}"]`, 'jelly']]);
@@ -1755,17 +1828,17 @@ $app.addEventListener('click', (e) => {
     case 'wk': ui.week = +t.dataset.v === 0 ? 0 : ui.week + +t.dataset.v; return soft();
     case 'mslot': ui.sheet = { type: 'meal', slot: t.dataset.slot }; return soft();
     case 'mpick': {
-      const slot = t.dataset.slot, [date, meal] = slot.split(':');
-      saveKeyed('meal_plan', slot, { date, meal, recipe_id: id, text: null });
+      const slot = t.dataset.slot;
+      setMeal(slot, { recipe_id: id });
       ui.sheet = null; return soft([[`[data-slot="${slot}"]`, 'pop']]);
     }
-    case 'mclear': { const slot = t.dataset.slot, [date, meal] = slot.split(':'); saveKeyed('meal_plan', slot, { date, meal, recipe_id: null, text: null }); ui.sheet = null; return soft(); }
+    case 'mclear': { setMeal(t.dataset.slot, {}); ui.sheet = null; return soft(); }
     case 'rfav': { const r = findRow('recipes', id); if (r) updateRow('recipes', id, { favorite: !r.favorite }); return soft([[`[data-act="rfav"][data-id="${id}"]`, 'jelly']]); }
     case 'rmethod': { const r = findRow('recipes', id); if (r) updateRow('recipes', id, { method: r.method === t.dataset.k ? null : t.dataset.k }); return soft([[`[data-act="rmethod"][data-k="${t.dataset.k}"]`, 'jelly']]); }
     case 'rtag': { const r = findRow('recipes', id); if (r) updateRow('recipes', id, { [t.dataset.k]: !r[t.dataset.k] }); return soft(); }
     case 'ragain': {
       const d = t.dataset.date, slot = M.slotOf(d), cur = findRow('meal_plan', slot);
-      saveKeyed('meal_plan', slot, cur?.recipe_id === id ? { date: d, meal: 'dinner', recipe_id: null, text: null } : { date: d, meal: 'dinner', recipe_id: id, text: null });
+      setMeal(slot, cur?.recipe_id === id ? {} : { recipe_id: id });
       return soft([[`[data-act="ragain"][data-date="${d}"]`, 'jelly']]);
     }
     case 'thawed': {
@@ -1781,7 +1854,19 @@ $app.addEventListener('click', (e) => {
       if (r) live('meal_plan').filter((m) => m.recipe_id === id).forEach((m) => saveKeyed('meal_plan', m.slot, { date: m.date, meal: m.meal, recipe_id: null, text: r.title }));
       removeRow('recipes', id); ui.sheet = null; return soft();
     }
-    case 'iopen': ui.ingr = {}; ui.sheet = { type: 'ingr' }; return soft();
+    case 'iopen': ui.ingr = {}; ui.ingrDays = null; ui.sheet = { type: 'ingr' }; return soft();
+    case 'shopsoon': ui.ingr = {}; ui.ingrDays = soonDays(); ui.sheet = { type: 'ingr' }; return soft();
+    case 'plannext': ui.ktab = 'meals'; ls.set(K.ktab, 'meals'); ui.week = 1; location.replace('#/kitchen'); return;
+    case 'wantadd': {
+      const f = $app.querySelector('[data-form="swap"]'); if (!f) return;
+      const v = t.dataset.v, parts = f.want.value.split(',').map((x) => x.trim()).filter(Boolean);
+      const on = parts.some((x) => x.toLowerCase() === v.toLowerCase());
+      f.want.value = (on ? parts.filter((x) => x.toLowerCase() !== v.toLowerCase()) : [...parts, v]).join(', ');
+      t.classList.toggle('on', !on); t.classList.add('jelly'); setTimeout(() => t.classList.remove('jelly'), 400);
+      return;
+    }
+    case 'autogro': saveKeyed('day_settings', 1, { auto_grocery: !autoGrocery() }); return soft();
+    case 'swapcopy': { const f = $app.querySelector('[data-form="swap"]'); copySwap(t.dataset.slot, f ? f.want.value : '', t); return; }
     case 'itog': { const k = t.dataset.k, x = ingrGroups().flatMap((g) => g.items).find((i) => i.key === k); if (x) ui.ingr[k] = !x.on; return soft([[`[data-k="${k}"] .cb`, 'jelly']]); }
     case 'iadd': {
       if (t.classList.contains('ld') || t.disabled) return;
@@ -1791,7 +1876,7 @@ $app.addEventListener('click', (e) => {
       setTimeout(() => t.classList.add('ok'), still ? 0 : 280);
       setTimeout(() => {
         for (const x of items) addGrocery(x.name, { note: x.qty || null });
-        ui.sheet = null; ui.ingr = {}; soft();
+        ui.sheet = null; ui.ingr = {}; ui.ingrDays = null; soft();
       }, still ? 0 : 820);
       return;
     }
@@ -1805,6 +1890,12 @@ $app.addEventListener('click', (e) => {
       ui.sheet = { type: 'recipe', id: r.id }; return soft();
     }
     case 'gear': { const v = t.dataset.v, g = gear(); saveKeyed('day_settings', 1, { appliances: g.includes(v) ? g.filter((x) => x !== v) : [...g, v] }); return soft([[`[data-act="gear"][data-v="${v}"]`, 'jelly']]); }
+    case 'wkclear': {
+      const ms = clearable();
+      if (!ms.length || !confirm(`Clear ${plural(ms.length, 'planned meal')} for ${weekRange(weekDays())}? Recipes stay saved.`)) return;
+      ms.forEach((m) => setMeal(m.slot, {}));
+      return soft();
+    }
     case 'planopen': ui.planErr = null; ui.sheet = { type: 'planpaste' }; render({ soft: true, keepFocus: '#planbox' }); return;
     case 'planread': {
       const box = $app.querySelector('#planbox'), text = box ? box.value : '';
