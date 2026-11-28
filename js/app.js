@@ -10,7 +10,7 @@ import * as A from './aisles.js';
 import * as R from './routines.js';
 import { parseStock } from './stock.js';
 
-const VERSION = '30';
+const VERSION = '31';
 const T = window.homeosTheme;
 const Q = new URLSearchParams(location.search);
 const PREVIEW = T.isPreview ? Q.get('preview') : null; // local screenshots only

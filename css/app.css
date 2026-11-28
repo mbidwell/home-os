@@ -569,7 +569,7 @@ svg.i.flip { transform: scaleX(-1); }
 .say-ex { font-style: italic; margin-top: -2px !important; }
 
 /* ---------- swipe through the week on Today ---------- */
-.dayswipe { display: flex; gap: 10px; overflow-x: auto; scroll-snap-type: x mandatory; margin: -10px -18px -14px; padding: 10px 18px 18px; scroll-padding: 0 18px; scrollbar-width: none; -webkit-overflow-scrolling: touch; overscroll-behavior-x: contain; }
+.dayswipe { display: flex; gap: 10px; overflow-x: auto; scroll-snap-type: x mandatory; margin: 4px -18px -26px; padding: 2px 18px 30px; scroll-padding: 0 18px; scrollbar-width: none; -webkit-overflow-scrolling: touch; overscroll-behavior-x: contain; }
 .dayswipe::-webkit-scrollbar { display: none; }
 .dayswipe > .dcard { flex: 0 0 calc(100% - 26px); scroll-snap-align: start; margin: 0; }
 .dayswipe > .dcard:last-child { flex-basis: 100%; }
@@ -585,3 +585,5 @@ svg.i.flip { transform: scaleX(-1); }
 .todo-prog .trk b { display: block; height: 100%; border-radius: 99px; background: var(--acc); transition: width .5s cubic-bezier(.2,.8,.2,1); }
 .todo-prog span { font: 700 13px var(--f-body); color: var(--ink2); white-space: nowrap; }
 @media (prefers-reduced-motion: reduce) { .todo-prog .trk b { transition: none; } }
+/* A softer shadow that fits inside the swipe area, so it isn't cut into a band. */
+.dayswipe > .dcard { box-shadow: var(--sh-soft); }
