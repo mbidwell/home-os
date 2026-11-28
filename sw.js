@@ -1,7 +1,7 @@
 // Home OS service worker.
 // Bump VERSION every release. This worker only ever deletes caches it owns (homeos-*).
 // Other apps on this origin keep their own caches and storage untouched.
-const VERSION = 'homeos-shell-v5';
+const VERSION = 'homeos-shell-v6';
 const FONTS = 'homeos-fonts-v1';
 const OWN = [VERSION, FONTS];
 const SHELL = [
@@ -11,7 +11,9 @@ const SHELL = [
 ];
 
 self.addEventListener('install', (e) => {
-  e.waitUntil(caches.open(VERSION).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting()));
+  // cache: 'reload' skips the browser's HTTP cache (GitHub Pages says max-age=600),
+  // so a new version never gets filled with the old files.
+  e.waitUntil(caches.open(VERSION).then((c) => c.addAll(SHELL.map((u) => new Request(u, { cache: 'reload' })))).then(() => self.skipWaiting()));
 });
 
 self.addEventListener('activate', (e) => {
@@ -46,7 +48,9 @@ self.addEventListener('fetch', (e) => {
   e.respondWith(caches.open(VERSION).then(async (c) => {
     const key = req.mode === 'navigate' ? 'index.html' : req;
     const hit = await c.match(key, { ignoreSearch: req.mode === 'navigate' });
-    const net = fetch(req).then((res) => {
+    // Always check with the server in the background, never the browser's HTTP cache.
+    const fresh = req.mode === 'navigate' ? new Request(req.url, { cache: 'no-cache', credentials: 'same-origin' }) : new Request(req, { cache: 'no-cache' });
+    const net = fetch(fresh).then((res) => {
       if (res.ok && res.type === 'basic') c.put(key, res.clone());
       return res;
     }).catch(() => hit || Response.error());

@@ -7,7 +7,7 @@ const T = window.homeosTheme;
 const Q = new URLSearchParams(location.search);
 const PREVIEW = T.isPreview ? Q.get('preview') : null; // local screenshots only
 const $app = document.getElementById('app');
-const K = { profiles: 'homeos-profiles', queue: 'homeos-queue', rows: 'homeos-rows', loc: 'homeos-kitchen-loc', debug: 'homeos-debug' };
+const K = { profiles: 'homeos-profiles', queue: 'homeos-queue', rows: 'homeos-rows', loc: 'homeos-kitchen-loc', later: 'homeos-partner-later', debug: 'homeos-debug' };
 const TABLES = ['grocery_items', 'staples', 'pantry_items'];
 
 const ls = {
@@ -355,7 +355,7 @@ function steps() {
   return [
     { done: !!myName(), title: 'Add your name', body: 'So the app shows your name, not your email.', go: '#/settings' },
     { done: installed(), title: 'Add Home to your home screen', body: 'In Safari, tap Share, then Add to Home Screen. It opens full screen and stays signed in.' },
-    { done: !!partner(), title: 'Get your partner signed in', body: 'Open Home on their phone, add it to the home screen, and sign in.' }
+    { done: !!partner() || ls.get(K.later, false), title: 'Get your partner signed in', body: 'Open Home on their phone, add it to the home screen, and sign in.', later: true }
   ];
 }
 
@@ -387,6 +387,7 @@ function homeView() {
         <h2>${esc(next.title)}${next.go ? ic('chev', 'i hchev') : ''}</h2>
         <p>${esc(next.body)}</p>
         <div class="prog" role="img" aria-label="${doneCount} of ${s.length} setup steps done"><div class="trk"><b style="width:${(doneCount / s.length) * 100}%"></b></div><span>${doneCount} of ${s.length}</span></div>
+        ${next.later ? `<button class="later press" data-act="later">Later</button>` : ''}
       </${next.go ? 'a' : 'section'}></div>` : '';
   const house = p
     ? `${name ? esc(name) : 'You'} and ${esc(p.display_name)}, both signed in`
@@ -686,12 +687,16 @@ $app.addEventListener('submit', async (e) => {
 });
 
 $app.addEventListener('click', (e) => {
+  // In-app links swap the screen without stacking history, so a back-swipe doesn't jump between tabs.
+  const link = e.target.closest('a[href^="#/"]');
+  if (link) { e.preventDefault(); if (location.hash !== link.getAttribute('href')) location.replace(link.getAttribute('href')); return; }
   const t = e.target.closest('[data-theme],[data-act]');
   if (!t || t.tagName === 'INPUT') return;
   if (t.dataset.theme) { T.setTheme(t.dataset.theme); render({ soft: true }); return; }
   const a = t.dataset.act, id = t.dataset.id;
   const soft = (fx) => render({ soft: true, keepFocus: '__none', fx });
   switch (a) {
+    case 'later': ls.set(K.later, true); return soft();
     case 'dim': T.setDim(t.getAttribute('aria-checked') !== 'true'); return soft();
     case 'sync':
       if (state.error) alert(state.error);
