@@ -1,0 +1,145 @@
+<!doctype html>
+<!-- Slice 2 mockups: Grocery, Add-from sheet (Staples / Buy at Costco), Kitchen. Sample data only.
+     Open with ?theme=night|dim|blush|roast -->
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Mono:wght@400;500&family=Inter:wght@400;500;600;700&family=Nunito:wght@500;600;700;800&display=swap">
+<link rel="stylesheet" href="../../css/app.css">
+<style>
+html, body { overflow: auto; height: auto; background: #0b0d14; }
+.sheet-wrap { display: flex; gap: 28px; padding: 28px; align-items: flex-start; }
+.cap { font: 600 15px system-ui; color: #aab; margin: 0 0 10px 4px; }
+.phone { width: 393px; height: 852px; border-radius: 48px; overflow: hidden; position: relative; display: flex; flex-direction: column; background: var(--bg); color: var(--ink); font: 16px/1.4 var(--f-body); box-shadow: 0 0 0 10px #1a1c22; }
+.phone .hd { padding-top: 58px; }
+.phone .dockwrap { padding-bottom: 30px; }
+
+/* 4-tab dock: icon over label */
+.dock.four a { flex-direction: column; gap: 3px; font-size: 12px; }
+.dock.four a svg.i { width: 21px; height: 21px; }
+
+/* quick add (the hero on Grocery and Kitchen) */
+.qa { background: var(--hero); color: var(--hero-ink); border-radius: 26px; padding: 14px; margin-bottom: 14px; box-shadow: var(--sh); }
+.qa .row { display: flex; gap: 10px; }
+.qa .fld { flex: 1; height: 56px; border-radius: 18px; background: color-mix(in srgb, var(--hero-ink) 9%, transparent); display: flex; align-items: center; padding: 0 16px; font-size: 17px; color: var(--hero-ink2); }
+.qa .add { width: 56px; height: 56px; border-radius: 18px; background: var(--acc); color: var(--on-acc); border: 0; display: grid; place-items: center; }
+.qa .chips { display: flex; gap: 8px; margin-top: 10px; }
+.chip { height: 40px; padding: 0 14px; border-radius: 999px; border: 1.5px solid color-mix(in srgb, var(--hero-ink) 22%, transparent); display: inline-flex; align-items: center; gap: 6px; font: 700 14px var(--f-body); color: var(--hero-ink); background: transparent; }
+.chip svg.i { width: 18px; height: 18px; }
+
+/* list sections */
+.sec { display: flex; align-items: baseline; justify-content: space-between; margin: 16px 6px 8px; }
+.sec b { font: 700 13px var(--f-body); color: var(--ink2); }
+.sec span { font: 500 13px var(--f-num); color: var(--ink2); }
+.list { background: var(--s1); border-radius: 24px; box-shadow: var(--sh-soft); padding: 2px 6px 2px 14px; }
+.it { min-height: 56px; display: flex; align-items: center; gap: 12px; }
+.it + .it { border-top: 1px solid var(--line); }
+.it .nm { flex: 1; font-weight: 600; }
+.it .nm small { display: block; font-weight: 500; font-size: 13px; color: var(--ink2); }
+.cb { width: 28px; height: 28px; border-radius: 9px; border: 2px solid var(--ink2); flex: none; display: grid; place-items: center; }
+.t-cozy .cb { border-radius: 50%; }
+.cb.on { background: var(--ok); border-color: var(--ok); color: var(--bg); }
+.cb svg.i { width: 18px; height: 18px; stroke-width: 2.6; }
+.tag { height: 36px; padding: 0 12px; border-radius: 12px; background: var(--s2); font: 700 13px var(--f-body); display: inline-flex; align-items: center; color: var(--ink); margin-right: 4px; }
+.done .nm { color: var(--ink2); text-decoration: line-through; }
+.clear { height: 36px; padding: 0 12px; border-radius: 12px; border: 1.5px solid var(--line); font: 700 13px var(--f-body); color: var(--ink2); background: none; margin-right: 4px; }
+.plus { width: 44px; height: 44px; border-radius: 14px; background: var(--s2); display: grid; place-items: center; margin-right: 2px; }
+.onlist { font: 600 13px var(--f-body); color: var(--ok); display: inline-flex; align-items: center; gap: 4px; margin-right: 8px; }
+.onlist svg.i { width: 16px; height: 16px; stroke-width: 2.4; }
+
+/* bottom sheet */
+.scrim { position: absolute; inset: 0; background: rgba(5,7,12,.5); z-index: 5; }
+.bs { position: absolute; left: 0; right: 0; bottom: 0; top: 150px; z-index: 6; background: var(--bg); border-radius: 30px 30px 0 0; padding: 10px 18px 30px; display: flex; flex-direction: column; box-shadow: 0 -10px 40px rgba(0,0,0,.3); }
+.bs .grab { width: 42px; height: 5px; border-radius: 9px; background: var(--line); margin: 0 auto 14px; }
+.bs h2 { font-size: var(--h2); margin: 0 4px 12px; display: flex; justify-content: space-between; align-items: center; }
+.bs h2 a { font: 700 14px var(--f-body); color: var(--ink2); }
+.seg { display: flex; background: var(--s1); border-radius: 18px; padding: 5px; gap: 5px; margin-bottom: 4px; }
+.seg span { flex: 1; height: 46px; border-radius: 14px; display: grid; place-items: center; font: 700 14px var(--f-body); color: var(--ink2); }
+.seg span.on { background: var(--ink); color: var(--bg); }
+.seg span.soon { opacity: .45; font-size: 12px; text-align: center; line-height: 1.1; }
+.bs .scroll { flex: 1; overflow: hidden; }
+
+/* Have / Low / Out */
+.hlo { display: flex; background: var(--s2); border-radius: 14px; padding: 3px; gap: 3px; flex: none; }
+.hlo span { width: 50px; height: 40px; border-radius: 11px; display: grid; place-items: center; font: 700 13px var(--f-body); color: var(--ink2); }
+.hlo span.h { background: var(--s1); color: var(--ink); }
+.hlo span.l { background: color-mix(in srgb, var(--acc) 30%, var(--s1)); color: var(--ink); }
+.hlo span.o { background: var(--ink); color: var(--bg); }
+.send { height: 34px; padding: 0 10px; border-radius: 11px; background: var(--s2); color: var(--ink); font: 700 12.5px var(--f-body); display: inline-flex; align-items: center; gap: 4px; margin-top: 6px; }
+.send svg.i { width: 15px; height: 15px; stroke-width: 2.4; }
+.hero.sum { padding: 18px 20px; border-radius: 26px; margin-bottom: 4px; }
+.hero.sum h2 { margin: 0 0 6px; }
+.hero.sum p { margin: 0 0 14px; }
+.hero.sum .pri { height: 50px; font-size: 15px; display: flex; align-items: center; justify-content: center; gap: 8px; }
+</style>
+</head>
+<body>
+<div class="sheet-wrap" id="w"></div>
+<script>
+var q = new URLSearchParams(location.search), t = q.get('theme') || 'night';
+var CLS = { night: 't-night', dim: 't-night t-dim', blush: 't-cozy t-blush', roast: 't-cozy t-roast' }[t];
+var I = {
+  home: '<path d="M3.5 11 12 3.8l8.5 7.2"/><path d="M5.5 9.6V20h13V9.6"/><path d="M10 20v-5.5h4V20"/>',
+  set: '<path d="M4 7h9M17 7h3M4 12h3M11 12h9M4 17h11M19 17h1"/><circle cx="15" cy="7" r="2"/><circle cx="9" cy="12" r="2"/><circle cx="17" cy="17" r="2"/>',
+  cart: '<path d="M3 4.5h2.4l2.1 10.2h10.4l2-7.4H6.6"/><circle cx="9.5" cy="19" r="1.4"/><circle cx="16.5" cy="19" r="1.4"/>',
+  box: '<rect x="4" y="3.5" width="16" height="17" rx="3"/><path d="M4 10h16M8 6.8v.4M8 13v3"/>',
+  plus: '<path d="M12 5v14M5 12h14"/>',
+  check: '<path d="M5 12.5 10 17.5 19 7"/>',
+  star: '<path d="m12 4 2.4 5 5.4.6-4 3.7 1.1 5.3L12 16l-4.9 2.6 1.1-5.3-4-3.7 5.4-.6z"/>',
+  bag: '<path d="M5.5 8h13l-1 12h-11z"/><path d="M9 8V6.5a3 3 0 0 1 6 0V8"/>'
+};
+function ic(k) { return '<svg class="i" viewBox="0 0 24 24" aria-hidden="true">' + I[k] + '</svg>'; }
+var cozy = t === 'blush' || t === 'roast';
+function hd(eb, title) { return '<header class="hd"><div class="top"><p class="eyebrow">' + eb + '</p><button class="sync s-ok"><i></i><span>Synced</span></button></div><h1>' + title + '</h1></header>'; }
+function dock(on) {
+  var b = function (k, l, i) { return '<a class="' + (on === k ? 'on' : '') + '">' + ic(i) + l + '</a>'; };
+  return '<nav class="dockwrap"><div class="dock four">' + b('home', 'Home', 'home') + b('grocery', 'Grocery', 'cart') + b('kitchen', 'Kitchen', 'box') + b('settings', 'Settings', 'set') + '</div></nav>';
+}
+function cb(on) { return '<span class="cb' + (on ? ' on' : '') + '">' + (on ? ic('check') : '') + '</span>'; }
+function it(name, extra, opts) { opts = opts || {}; return '<div class="it' + (opts.done ? ' done' : '') + '">' + cb(opts.done) + '<span class="nm">' + name + (opts.sub ? '<small>' + opts.sub + '</small>' : '') + '</span>' + (extra || '') + '</div>'; }
+function sec(a, b) { return '<div class="sec"><b>' + a + '</b><span>' + (b || '') + '</span></div>'; }
+
+var grocery =
+  hd('8 to get', 'Grocery') +
+  '<main>' +
+    '<div class="qa"><div class="row"><div class="fld">' + (cozy ? 'What do we need?' : 'Add an item') + '</div><button class="add">' + ic('plus') + '</button></div>' +
+    '<div class="chips"><span class="chip">' + ic('star') + 'Staples</span><span class="chip">' + ic('bag') + 'Buy at Costco</span></div></div>' +
+    sec('Unsorted', '2') +
+    '<div class="list">' + it('Paper towels', '<span class="tag">Tag store</span>') + it('Birthday candles', '<span class="tag">Tag store</span>') + '</div>' +
+    sec('Costco', '3') +
+    '<div class="list">' + it('Eggs', '', { sub: '2 dozen' }) + it('Bananas') + it('Coffee beans') + '</div>' +
+    sec('Wegmans', '2') +
+    '<div class="list">' + it('Sourdough bread') + it('Fresh basil') + '</div>' +
+    sec('Got it', '3') +
+    '<div class="list">' + it('Milk', '<button class="clear">Clear 3</button>', { done: true }) + it('Yogurt', '', { done: true }) + it('Apples', '', { done: true }) + '</div>' +
+  '</main>' + dock('grocery');
+
+var sheetRow = function (n, on) { return '<div class="it"><span class="nm">' + n + '</span>' + (on ? '<span class="onlist">' + ic('check') + 'On list</span>' : '<span class="plus">' + ic('plus') + '</span>') + '</div>'; };
+var sheet =
+  hd('8 to get', 'Grocery') + '<main></main>' + dock('grocery') +
+  '<div class="scrim"></div><div class="bs"><div class="grab"></div>' +
+  '<h2>Add from<a>Edit</a></h2>' +
+  '<div class="seg"><span>Staples</span><span class="on">Buy at Costco</span></div>' +
+  '<div class="scroll">' +
+    sec('Fridge', '') + '<div class="list">' + sheetRow('Eggs', true) + sheetRow('Shredded cheese') + sheetRow('Butter') + '</div>' +
+    sec('Freezer', '') + '<div class="list">' + sheetRow('Frozen berries') + sheetRow('Chicken thighs') + sheetRow('Frozen peas') + '</div>' +
+    sec('Pantry', '') + '<div class="list">' + sheetRow('Coffee beans', true) + sheetRow('Olive oil') + '</div>' +
+  '</div></div>';
+
+var hlo = function (s) { return '<span class="hlo"><span class="' + (s === 'h' ? 'h' : '') + '">Have</span><span class="' + (s === 'l' ? 'l' : '') + '">Low</span><span class="' + (s === 'o' ? 'o' : '') + '">Out</span></span>'; };
+var row = function (n, s, extra) { return '<div class="it"><span class="nm">' + n + (extra || '') + '</span>' + hlo(s) + '</div>'; };
+var kitchen =
+  hd('Fridge · 9 items', 'Kitchen') +
+  '<main>' +
+    '<div class="seg"><span class="on">Fridge</span><span>Freezer</span><span>Pantry</span><span class="soon">Garage<br>soon</span></div>' +
+    '<div class="stack" style="margin:14px 0 26px"><section class="hero sum"><p class="eyebrow">Out</p><h2>Eggs</h2><p>Out, and not on the grocery list yet.</p><button class="pri">' + ic('cart') + 'Add to grocery</button></section></div>' +
+    sec('Out', '2') + '<div class="list">' + row('Milk', 'o', '<br><span class="onlist" style="margin:4px 0 0">' + ic('check') + 'On grocery</span>') + row('Eggs', 'o', '<br><span class="send">' + ic('plus') + 'Grocery</span>') + '</div>' +
+    sec('Low', '1') + '<div class="list">' + row('Butter', 'l') + '</div>' +
+    sec('Have', '6') + '<div class="list">' + row('Shredded cheese', 'h') + row('Yogurt', 'h') + row('Hot sauce', 'h') + '</div>' +
+  '</main>' + dock('kitchen');
+
+var W = document.getElementById('w');
+[['Grocery', grocery], ['Add from (sheet)', sheet], ['Kitchen', kitchen]].forEach(function (p) {
+  W.insertAdjacentHTML('beforeend', '<div><p class="cap">' + p[0] + ' · ' + t + '</p><div class="phone ' + CLS + '">' + p[1] + '</div></div>');
+});
+</script>
+</body></html>
