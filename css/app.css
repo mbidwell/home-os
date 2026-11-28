@@ -482,3 +482,10 @@ button { background: none; border: 0; padding: 0; cursor: pointer; }
 .favs .pick { display: inline-flex; align-items: center; }
 .wants .pick { height: 38px; font-size: 13px; }
 .wants .pick.on { background: var(--ink); border-color: var(--ink); color: var(--bg); }
+.sc.union { background: color-mix(in srgb, var(--ink) 18%, var(--s2)); color: var(--ink); }
+.sc.uadd { background: transparent; border: 1.5px dashed var(--line); color: var(--ink2); min-height: 30px; display: inline-flex; align-items: center; }
+.sc.uadd svg.i { width: 14px; height: 14px; }
+.actrow.two2 { display: flex; gap: 8px; }
+.actrow.two2 .actb { flex: 1; }
+.el .qt, .it.qt .nm { opacity: .55; }
+.it.qt .nm { font-weight: 500; }

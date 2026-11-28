@@ -5,7 +5,7 @@ import * as S from './schedule.js';
 import * as D from './day.js';
 import * as M from './meals.js';
 
-const VERSION = '11';
+const VERSION = '15';
 const T = window.homeosTheme;
 const Q = new URLSearchParams(location.search);
 const PREVIEW = T.isPreview ? Q.get('preview') : null; // local screenshots only
@@ -132,6 +132,7 @@ if (PREVIEW) {
   if (Q.get('nap')) state.rows.day_overrides = [{ date: today, nap_start: Q.get('nap'), nap_end: (() => { const [h, m] = Q.get('nap').split(':').map(Number); return `${String(h + 2).padStart(2, '0')}:${String(m).padStart(2, '0')}`; })() }];
   state.rows.kid_items = [
     { id: 'k1', kind: 'appointment', title: 'Pediatrician', starts_at: at(0, 16, 30) },
+    { id: 'k7', kind: 'appointment', title: 'Swim lesson', starts_at: at(2, 20) },
     { id: 'k2', kind: 'appointment', title: 'Dentist checkup', starts_at: at(12, 10) },
     { id: 'k3', kind: 'supply', title: 'Diapers', status: 'low' }, { id: 'k4', kind: 'supply', title: 'Wipes', status: 'have' },
     { id: 'k5', kind: 'supply', title: 'Formula', status: 'have' }, { id: 'k6', kind: 'supply', title: 'Kids’ Tylenol', status: 'out' }
@@ -161,7 +162,10 @@ if (PREVIEW) {
       recipes: [{ title: 'Sheet pan gnocchi', method: 'sheet_pan', ingredients: '1 lb gnocchi\n1 pint cherry tomatoes\n1 red onion\n2 tbsp olive oil\nItalian sausage', steps: 'Heat the oven to 425.\nToss everything on a sheet pan.\nRoast 20 minutes.', notes: null, source_url: null, on: true }] };
   }
   if (Q.get('msheet') === 'ingrsoon') { ui.ingrDays = [0, 1, 2].map((i) => S.addDays(today, i)); ui.sheet = { type: 'ingr' }; }
+  else if (Q.get('msheet') === 'kid') ui.sheet = { type: 'kid', id: 'k1' };
   else if (Q.get('msheet')) ui.sheet = Q.get('msheet') === 'recipe' ? { type: 'recipe', id: 'r1' } : Q.get('msheet') === 'meal' ? { type: 'meal', slot: M.slotOf(S.addDays(today, 1)) } : { type: Q.get('msheet') };
+  if (Q.get('union')) state.rows.day_overrides.push({ date: today, union_day: true });
+  if (Q.get('owner')) state.rows.day_settings[0].calendar_owner = Q.get('owner'); // 'me' or 'p' (see it as the partner)
   if (Q.get('cal')) ui.calTab = Q.get('cal');
   if (Q.get('oncall')) state.rows.calendar_events[0] = ev('s1', { kind: 'shift', shift_type: 'on_call', all_day: true, start_date: today, end_date: today });
   if (Q.get('tab')) ui.choreTab = Q.get('tab');
@@ -1130,7 +1134,7 @@ function taskSheet(t) {
 /* --- today, calendar, kids, event shifts --- */
 const TZ = Intl.DateTimeFormat().resolvedOptions().timeZone;
 const FN_URL = `${(window.HOMEOS_CONFIG?.supabaseUrl || '').replace(/\/+$/, '')}/functions/v1/calendar-sync`;
-const daySet = () => ({ nap_start: '13:00', nap_end: '16:00', nap_minutes: 120, dinner: '18:00', bed: '20:00', post_call_hours: 10, ...(state.rows.day_settings[0] || {}) });
+const daySet = () => ({ nap_start: '13:00', nap_end: '16:00', nap_minutes: 120, dinner: '18:00', bed: '20:00', post_call_hours: 10, union_start: '09:00', union_end: '17:00', ...(state.rows.day_settings[0] || {}) });
 const nowHM = () => hhmmOf(new Date().toISOString());
 const hm = (t) => String(t || '').slice(0, 5);
 function clock(t, withAp = true) { // '13:30' -> '1:30 PM'
@@ -1156,16 +1160,69 @@ function calSync() {
   const stale = !lastOk || Date.now() - Date.parse(lastOk) > 2 * 3600000;
   return { setup: true, ok: !err && !stale, err, stale, lastOk, rows };
 }
-const statusOf = (date) => D.dayStatus(date, calRows(), activations(), { tz: TZ, postCallHours: daySet().post_call_hours, syncOk: calSync().ok });
-const CHIP = { working: 'work', activated: 'work', on_call: 'call', post_call: 'sleep', no_shift: 'none', not_posted: 'np', unknown: 'np' };
+// A union day: a non-clinical day at the union EMS office during office hours. Marked by hand, shared.
+const unionOn = (date) => !!findRow('day_overrides', date)?.union_day;
+const baseStatus = (date) => D.dayStatus(date, calRows(), activations(), { tz: TZ, postCallHours: daySet().post_call_hours, syncOk: calSync().ok });
+const hourOf = (t) => { const [h, m] = hm(t).split(':').map(Number); return h + (m || 0) / 60; };
+// Union days: weekdays with no shift, or only a short evening shift (a 5 PM–2 AM). Not overnight days
+// (a 7p–7a, a 9p–6a) and not post call, when there's sleep to catch up on.
+function canUnion(date) {
+  const wd = S.weekdayOf(date);
+  if (wd === 0 || wd === 6) return false;
+  const st = baseStatus(date);
+  if (['unknown', 'post_call', 'activated'].includes(st.type) || st.postCall) return false;
+  const ue = hourOf(daySet().union_end);
+  const ok = (r) => {
+    if (r.all_day || D.localDateOf(Date.parse(r.starts_at), TZ) !== date) return true;
+    const start = D.localHourOf(Date.parse(r.starts_at), TZ);
+    const nextDay = D.localDateOf(Date.parse(r.ends_at), TZ) > date, end = D.localHourOf(Date.parse(r.ends_at), TZ);
+    return start >= ue && (!nextDay || end <= 3); // starts after the office closes, done by 3 AM
+  };
+  return calRows().filter((r) => r.kind === 'shift' && r.shift_type === 'working').every(ok);
+}
+const unionHours = () => `${clock(daySet().union_start)} – ${clock(daySet().union_end)}`;
+function statusOf(date) {
+  const st = baseStatus(date);
+  if (!unionOn(date) || !canUnion(date)) return st;
+  if (st.type === 'working' || st.type === 'activated') return { ...st, union: true }; // union by day, shift at night
+  return { ...st, type: 'union', label: 'Union day', was: st.type, hours: span(daySet().union_start, daySet().union_end), hoursLong: unionHours() };
+}
+// Whose calendar this is. Their phone shows everything; the other phone gets a slim version.
+const calOwner = () => daySet().calendar_owner || null;
+const mine = () => !calOwner() || calOwner() === myId();
+const ownerName = () => (calOwner() ? userName(calOwner()) : 'Partner');
+const CHIP = { union: 'union', working: 'work', activated: 'work', on_call: 'call', post_call: 'sleep', no_shift: 'none', not_posted: 'np', unknown: 'np' };
 function chipText(st) {
   if (st.type === 'working') return `Working ${st.hours}`;
   if (st.type === 'activated') return `Activated ${st.hours}`;
   if (st.type === 'post_call') return `Post call ${st.hours}`;
+  if (st.type === 'union') return `Union ${st.hours}`;
   return st.label;
+}
+function chipTextU(st) { return st.union ? `${chipText(st)} + union` : chipText(st);
 }
 const eventsOn = (date) => calRows().filter((r) => r.kind !== 'shift' && (r.all_day ? r.start_date <= date && date <= r.end_date : r.start_date === date));
 const kidsAll = () => live('kid_items');
+// Appointments and the calendar owner's work. An appointment that overlaps a shift, an event shift, or an activation
+// is "at work": the other parent takes it unless someone picks otherwise.
+const APPT_MS = 3600000;
+function atWork(k) {
+  if (!calOwner() || !k.starts_at) return false;
+  const a = Date.parse(k.starts_at), b = a + APPT_MS;
+  const hit = (from, to) => from && Date.parse(from) < b && (to ? Date.parse(to) : Date.parse(from) + 12 * 3600000) > a;
+  return calRows().some((r) => !r.all_day && ((r.kind === 'shift' && r.shift_type === 'working') || r.kind === 'event_shift') && hit(r.starts_at, r.ends_at))
+    || activations().some((x) => hit(x.activated_from, x.activated_to));
+}
+const otherParent = () => state.members.find((id) => id !== calOwner()) || null;
+const takerOf = (k) => k.taker || (atWork(k) ? otherParent() : null); // a user id, 'both', or null (not decided)
+function takerLine(k) {
+  const t = takerOf(k);
+  if (!t) return '';
+  if (t === 'both') return 'Both going';
+  return t === myId() ? 'You’re taking it' : `${userName(t)}’s taking it`;
+}
+// On the owner's phone, an appointment they can't make drops to a quiet line instead of their timeline.
+const quietForMe = (k) => !!calOwner() && calOwner() === myId() && atWork(k) && takerOf(k) !== myId() && takerOf(k) !== 'both';
 const apptsOn = (date) => kidsAll().filter((k) => k.kind === 'appointment' && k.starts_at && D.localDateOf(Date.parse(k.starts_at), TZ) === date);
 
 // Ask the server to re-read the calendars (at most every few minutes from this phone), then refresh.
@@ -1191,7 +1248,8 @@ function timeline(date) {
     const dur = mins >= 60 ? `${+(mins / 60).toFixed(1)} hr${mins === 60 ? '' : 's'}` : `${mins} min`;
     items.push({ k: hhmmOf(e.starts_at), t: timeOf(e.starts_at), w: e.kind === 'meeting' ? 'Work meeting' : e.title || 'Busy', sub: e.kind === 'event_shift' ? `${D.hoursLabel(e.starts_at, e.ends_at, TZ, true)}` : dur, tag: e.kind === 'event_shift' ? 'Event shift' : '', cls: 'ev' });
   }
-  for (const a of apptsOn(date)) items.push({ k: hhmmOf(a.starts_at), t: timeOf(a.starts_at), w: a.title, sub: 'Kids', cls: 'ev', go: '#/kids' });
+  if (unionOn(date) && canUnion(date)) items.push({ k: hm(daySet().union_start), t: span(daySet().union_start, daySet().union_end), w: 'Union office', sub: 'Union EMS', cls: 'ev' });
+  for (const a of apptsOn(date)) if (!quietForMe(a)) items.push({ k: hhmmOf(a.starts_at), t: timeOf(a.starts_at), w: a.title, sub: ['Kids', takerLine(a)].filter(Boolean).join(' · '), tag: !mine() && atWork(a) ? `${ownerName()}’s working` : '', cls: 'ev', go: '#/kids' });
   items.push(napSet
     ? { k: hm(nap[0]), t: span(nap[0], nap[1]), w: 'Nap', sub: '', nap: true }
     : { k: hm(nap[0]), t: span(nap[0], nap[1]), w: 'Nap', sub: `About ${napLen(ds.nap_minutes)}`, nap: true, window: true });
@@ -1222,21 +1280,24 @@ function tlHtml(date, withNapBtn) {
   return `${allDay.length ? `<div class="alld">${allDay.map((e) => `<span>${esc(e.title || 'Busy')}</span>`).join('')}</div>` : ''}<div class="tl rise d1">${items.map(row).join('')}</div>`;
 }
 
-function shiftHero(today) {
+function shiftHero(today, readOnly = false) {
   const cs = calSync();
   if (!cs.setup) return `<a class="card press rise" href="#/settings"><div class="ic">${ic('cal')}</div><div><b>Calendar</b><small>Not connected yet. Your shifts will show here.</small></div></a>`;
   const st = statusOf(today), tom = statusOf(S.addDays(today, 1));
   const asOf = !cs.ok && cs.lastOk ? ` · as of ${timeOf(cs.lastOk)}` : '';
   const pc = st.postCall && st.type !== 'post_call' ? `<p class="pcl">Post call until ${timeOf(st.postCall.until)}</p>` : '';
-  const act = st.type === 'on_call' ? `<button class="actb press" data-act="actopen" data-date="${today}">I got activated</button>`
+  const actBtn = st.type === 'on_call' || st.was === 'on_call' ? `<button class="actb press" data-act="actopen" data-date="${today}">I got activated</button>`
     : st.type === 'activated' ? `<button class="actb press" data-act="actopen" data-date="${today}">Edit activation</button>` : '';
-  const sub = st.type === 'working' ? esc(st.site || '') : st.type === 'on_call' ? 'Not working unless called in' : st.type === 'post_call' ? 'Rest after the overnight' : st.type === 'not_posted' ? 'Nothing posted for today yet' : st.type === 'unknown' ? 'Can’t tell until the calendar updates' : '';
+  const unionBtn = unionOn(today) && canUnion(today) ? `<button class="actb press" data-act="union" data-date="${today}">Not a union day</button>`
+    : canUnion(today) ? `<button class="actb press" data-act="union" data-date="${today}">Union day</button>` : '';
+  const act = readOnly ? '' : [actBtn, unionBtn].filter(Boolean).join('');
+  const sub = st.type === 'union' ? `Union EMS office${st.was === 'on_call' ? ' · on call too' : st.was === 'post_call' ? ' · post call this morning' : ''}` : st.type === 'working' ? esc(st.site || '') : st.type === 'on_call' ? 'Not working unless called in' : st.type === 'post_call' ? 'Rest after the overnight' : st.type === 'not_posted' ? 'Nothing posted for today yet' : st.type === 'unknown' ? 'Can’t tell until the calendar updates' : '';
   return `<div class="stack rise" style="margin:0 0 26px"><a class="hero shift press${st.type === 'unknown' ? ' unknown' : ''}" href="#/calendar">
-    <p class="eyebrow">Your day${asOf}</p>
+    <p class="eyebrow">${readOnly ? `${esc(ownerName())}’s day` : 'Your day'}${asOf}</p>
     <div class="row2"><h2>${esc(st.label)}</h2><span class="big">${esc(st.hoursLong || (st.type === 'post_call' ? st.hours : '') || '')}</span></div>
-    ${sub ? `<p>${sub}</p>` : ''}${pc}
-    <div class="tom"><span>Tomorrow</span><b>${esc(chipText(tom))}</b></div>
-  </a>${act ? `<div class="actrow">${act}</div>` : ''}</div>`;
+    ${sub ? `<p>${sub}</p>` : ''}${!readOnly && apptsOn(today).some(quietForMe) ? `<p class="pcl">While you’re at work: ${apptsOn(today).filter(quietForMe).map((a) => `${esc(a.title)} ${timeOf(a.starts_at)}`).join(', ')}</p>` : ''}${st.union ? `<p class="pcl">Union office ${unionHours()}</p>` : ''}${pc}
+    <div class="tom"><span>Tomorrow</span><b>${esc(chipTextU(tom))}</b></div>
+  </a>${act ? `<div class="actrow${actBtn && unionBtn ? ' two2' : ''}">${act}</div>` : ''}</div>`;
 }
 
 function syncWarn() {
@@ -1266,7 +1327,7 @@ function todayCards(today) {
   const kl = [out && `${out} out`, low && `${low} low`].filter(Boolean).join(', ');
   if (kl) cards.push(`<a class="card press rise d2" href="#/kitchen"><div class="ic">${ic('box')}</div><div><b>Kitchen</b><small>${kl}</small></div></a>`);
   const nextShift = eventShifts().filter((e) => e.start_date >= today).pop();
-  if (nextShift) cards.push(`<a class="card press rise d2" href="#/events"><div class="ic">${ic('cal')}</div><div><b>Event shifts</b><small>Next: ${esc(nextShift.title)} ${S.dueLabel(nextShift.start_date, today).toLowerCase()}</small></div></a>`);
+  if (nextShift && mine()) cards.push(`<a class="card press rise d2" href="#/events"><div class="ic">${ic('cal')}</div><div><b>Event shifts</b><small>Next: ${esc(nextShift.title)} ${S.dueLabel(nextShift.start_date, today).toLowerCase()}</small></div></a>`);
   return cards.join('');
 }
 
@@ -1288,7 +1349,7 @@ function homeView() {
   <main>
     ${syncWarn()}
     ${setup}
-    ${shiftHero(td)}
+    ${shiftHero(td, !mine())}
     ${thawCard(td)}${shopCard()}${planNextCard(td)}
     ${resetCard()}
     ${sec('Today')}${tlHtml(td, true)}
@@ -1309,11 +1370,11 @@ function calendarView() {
     const dt = new Date(S.parse(d));
     const dn = dt.toLocaleDateString(undefined, { weekday: 'short', timeZone: 'UTC' }), dd = dt.toLocaleDateString(undefined, { month: 'short', day: 'numeric', timeZone: 'UTC' });
     const evs = [...eventsOn(d).map((e) => ({ k: e.all_day ? '00:00' : hhmmOf(e.starts_at), t: e.all_day ? 'All day' : timeOf(e.starts_at), w: e.kind === 'meeting' ? 'Work meeting' : e.title || 'Busy', es: e.kind === 'event_shift' })),
-      ...apptsOn(d).map((a) => ({ k: hhmmOf(a.starts_at), t: timeOf(a.starts_at), w: a.title }))].sort((a, b) => a.k.localeCompare(b.k));
+      ...apptsOn(d).map((a) => ({ k: hhmmOf(a.starts_at), t: timeOf(a.starts_at), w: a.title, quiet: quietForMe(a), tag: quietForMe(a) ? 'At work' : !mine() && atWork(a) ? `${ownerName()}’s working` : '' }))].sort((a, b) => a.k.localeCompare(b.k));
     const pc = st.postCall && st.type !== 'post_call' ? `<span class="sc sleep">Post call until ${timeOf(st.postCall.until)}</span>` : '';
     const list = ui.calTab === 'month' ? (evs.length ? `<div class="el">${evs.slice(0, 2).map((e) => `<b>${esc(e.t)}</b>${esc(e.w)}`).join('<br>')}${evs.length > 2 ? `<br>+${evs.length - 2} more` : ''}</div>` : '')
-      : (evs.length ? `<div class="el">${evs.map((e) => `<b>${esc(e.t)}</b>${esc(e.w)}${e.es ? '<span class="tag2">Event shift</span>' : ''}`).join('<br>')}</div>` : '');
-    cards.push(`<div class="day${d === today ? ' today' : ''}"><div class="dh"><span class="dn">${dn}<small>${dd}</small></span><span class="chips2"><span class="sc ${CHIP[st.type]}">${esc(chipText(st))}</span>${pc}</span></div>${st.type === 'working' && st.site ? `<div class="el site">${esc(st.site)}</div>` : ''}${list}</div>`);
+      : (evs.length ? `<div class="el">${evs.map((e) => `<span class="${e.quiet ? 'qt' : ''}"><b>${esc(e.t)}</b>${esc(e.w)}${e.es ? '<span class="tag2">Event shift</span>' : ''}${e.tag ? `<span class="tag2">${esc(e.tag)}</span>` : ''}</span>`).join('<br>')}</div>` : '');
+    cards.push(`<div class="day${d === today ? ' today' : ''}"><div class="dh"><span class="dn">${dn}<small>${dd}</small></span><span class="chips2"><span class="sc ${CHIP[st.type]}">${esc(chipText(st))}</span>${pc}${st.union ? `<span class="sc union">Union ${esc(span(daySet().union_start, daySet().union_end))}</span>` : ''}${!mine() || ui.calTab === 'month' || !canUnion(d) ? '' : unionOn(d) ? `<button class="sc uadd press" data-act="union" data-date="${d}" aria-label="Not a union day">${ic('x')}</button>` : `<button class="sc uadd press" data-act="union" data-date="${d}">+ Union</button>`}</span></div>${st.type === 'working' && st.site ? `<div class="el site">${esc(st.site)}</div>` : ''}${list}</div>`);
   }
   const end = new Date(S.parse(S.addDays(today, days - 1))).toLocaleDateString(undefined, { month: 'short', day: 'numeric', timeZone: 'UTC' });
   const start = new Date(S.parse(today)).toLocaleDateString(undefined, { month: 'short', day: 'numeric', timeZone: 'UTC' });
@@ -1344,7 +1405,7 @@ function kidsView() {
   const upcoming = appts.filter((a) => !a.starts_at || Date.parse(a.starts_at) > Date.now() - 2 * 3600000);
   const supplies = kidsAll().filter((k) => k.kind === 'supply').sort((a, b) => a.title.localeCompare(b.title));
   const today = todayStr();
-  const apptRow = (a) => `<div class="it appt"><button class="nm" data-act="kitem" data-id="${a.id}">${esc(a.title)}<span class="when">${a.starts_at ? `${S.dueLabel(D.localDateOf(Date.parse(a.starts_at), TZ), today)} · ${timeOf(a.starts_at)}` : 'No time set'}</span></button>${a.starts_at ? `<button class="cal press" data-act="addcal" data-id="${a.id}">${ic('cal')}Add</button>` : ''}</div>`;
+  const apptRow = (a) => `<div class="it appt${quietForMe(a) ? ' qt' : ''}"><button class="nm" data-act="kitem" data-id="${a.id}">${esc(a.title)}<span class="when">${a.starts_at ? `${S.dueLabel(D.localDateOf(Date.parse(a.starts_at), TZ), today)} · ${timeOf(a.starts_at)}` : 'No time set'}${takerLine(a) ? ` · ${esc(takerLine(a))}` : ''}${quietForMe(a) ? ' · you’re at work' : ''}</span></button>${a.starts_at && !quietForMe(a) ? `<button class="cal press" data-act="addcal" data-id="${a.id}">${ic('cal')}Add</button>` : ''}</div>`;
   const hloK = (k) => { const b = (s2, label) => `<button class="${k.status === s2 ? s2[0] : ''}" data-act="kstat" data-id="${k.id}" data-s="${s2}" aria-pressed="${k.status === s2}">${label}</button>`; return `<span class="hlo">${b('have', 'Have')}${b('low', 'Low')}${b('out', 'Out')}</span>`; };
   const supRow = (k) => {
     const sub = k.status === 'out' || k.status === 'low' ? (onGrocery(k.title) ? `<span class="onlist">${ic('check')}On grocery</span>` : `<span class="send press" data-act="ksend" data-id="${k.id}" role="button">${ic('plus')}Grocery</span>`) : '';
@@ -1369,9 +1430,11 @@ function kidSheet(k) {
   if (!k || k.deleted_at) return '';
   const local = k.starts_at ? `${D.localDateOf(Date.parse(k.starts_at), TZ)}T${hhmmOf(k.starts_at)}` : '';
   return `<h2><input class="ttl" data-kf="title" data-id="${k.id}" value="${esc(k.title)}" maxlength="120" aria-label="Name" enterkeyhint="done"><button class="lnk" data-act="close">Done</button></h2>
-    <div class="list frm">${k.kind === 'appointment' ? `<label class="frow">When<input type="datetime-local" class="dt" data-kf="starts_at" data-id="${k.id}" value="${local}"></label>` : ''}</div>
+    <div class="list frm">${k.kind === 'appointment' ? `<label class="frow">When<input type="datetime-local" class="dt" data-kf="starts_at" data-id="${k.id}" value="${local}"></label>
+      <div class="frow">Who’s taking it<span class="seg sm">${[...state.members.map((id) => [id, id === myId() ? (myName() || 'Me') : userName(id)]), ['both', 'Both']].map(([v, l]) => `<button class="${takerOf(k) === v ? 'on' : ''}" data-act="ktaker" data-id="${k.id}" data-v="${v}" aria-pressed="${takerOf(k) === v}">${esc(l)}</button>`).join('')}</span></div>` : ''}</div>
+    ${k.kind === 'appointment' && atWork(k) ? `<p class="hint">${calOwner() === myId() ? 'You’re working then' : `${esc(ownerName())}’s working then`}${k.taker ? '' : `, so ${esc(userName(otherParent()) || 'the other parent')} is set to take it`}.</p>` : ''}
     ${sec('Notes')}<textarea class="ta" data-kf="notes" data-id="${k.id}" rows="3" placeholder="Optional">${esc(k.notes || '')}</textarea>
-    ${k.kind === 'appointment' && k.starts_at ? `<div class="acts2" style="margin-top:12px"><a class="pri press" target="_blank" rel="noopener" href="${gcalLink(k)}">${ic('cal')}Google Calendar</a><button class="ghost press" data-act="ics" data-id="${k.id}">Phone calendar</button></div>` : ''}
+    ${k.kind === 'appointment' && k.starts_at && !quietForMe(k) ? `<div class="acts2" style="margin-top:12px"><a class="pri press" target="_blank" rel="noopener" href="${gcalLink(k)}">${ic('cal')}Google Calendar</a><button class="ghost press" data-act="ics" data-id="${k.id}">Phone calendar</button></div>` : ''}
     <button class="ghost press" data-act="kdel" data-id="${k.id}" style="margin-top:12px">Delete</button>`;
 }
 
@@ -1546,16 +1609,19 @@ function settingsView() {
       <label class="fl">Bed<input type="time" class="dt sm" data-dset="bed" value="${hm(daySet().bed)}"></label>
       <button class="fl swr" role="switch" aria-checked="${lunchOn()}" data-act="lunchplan">Plan lunch too<span class="tg" aria-hidden="true"></span></button>
       <button class="fl swr" role="switch" aria-checked="${autoGrocery()}" data-act="autogro">Add what meals need to grocery<span class="tg" aria-hidden="true"></span></button>
-      <label class="fl">Post call<span class="pair"><input type="number" class="num" min="0" max="24" inputmode="numeric" data-dset="post_call_hours" value="${daySet().post_call_hours}"><span class="evl">hours</span></span></label>
+      ${mine() ? `<label class="fl">Union hours<span class="pair"><input type="time" class="dt sm" data-dset="union_start" value="${hm(daySet().union_start)}" aria-label="Union office opens"><span class="evl">to</span><input type="time" class="dt sm" data-dset="union_end" value="${hm(daySet().union_end)}" aria-label="Union office closes"></span></label>
+      <label class="fl">Post call<span class="pair"><input type="number" class="num" min="0" max="24" inputmode="numeric" data-dset="post_call_hours" value="${daySet().post_call_hours}"><span class="evl">hours</span></span></label>` : ''}
     </div>
     <p class="gt" style="margin-top:18px">Cooking with</p>
     <div class="grp rise d1"><div class="gear">${GEAR.map(([k, l]) => `<button class="pick press${gear().includes(k) ? ' on' : ''}" data-act="gear" data-v="${k}" aria-pressed="${gear().includes(k)}">${l}</button>`).join('')}</div>
       <p class="hint" style="margin:0 0 14px">Shared. Copy for AI only suggests ways to cook that you have.</p></div>
     <p class="gt" style="margin-top:18px">Calendar</p>
     <div class="grp rise d1">
-      ${calSync().setup ? calSync().rows.map((r) => `<div class="fl">${r.source === 'google' ? 'Google' : 'Outlook'}<span class="v">${r.last_error ? esc(r.last_error) : r.last_ok_at ? `Updated ${timeOf(r.last_ok_at)}` : 'Waiting'}</span></div>`).join('') : '<div class="fl">Not connected<span class="v">See README, step 10</span></div>'}
-      <button class="fl press" data-act="calsync">Sync now<span class="v">${ic('reset')}</span></button>
-      <a class="fl press" href="#/events">Event shifts<span class="v">${ic('chev')}</span></a>
+      <div class="fl">Shifts belong to<span class="seg sm"><button class="${calOwner() === myId() ? 'on' : ''}" data-act="calowner" data-v="me" aria-pressed="${calOwner() === myId()}">${esc(myName() || 'Me')}</button>${partnerId() ? `<button class="${calOwner() && calOwner() === partnerId() ? 'on' : ''}" data-act="calowner" data-v="partner" aria-pressed="${calOwner() === partnerId()}">${esc(userName(partnerId()))}</button>` : ''}</span></div>
+      ${!mine() ? `<p class="hint" style="margin:0 0 12px">You see ${esc(ownerName())}’s calendar. The activation and union buttons are only on their phone.</p>` : ''}
+      ${!mine() ? '' : calSync().setup ? calSync().rows.map((r) => `<div class="fl">${r.source === 'google' ? 'Google' : 'Outlook'}<span class="v">${r.last_error ? esc(r.last_error) : r.last_ok_at ? `Updated ${timeOf(r.last_ok_at)}` : 'Waiting'}</span></div>`).join('') : '<div class="fl">Not connected<span class="v">See README, step 10</span></div>'}
+      ${mine() ? `<button class="fl press" data-act="calsync">Sync now<span class="v">${ic('reset')}</span></button>
+      <a class="fl press" href="#/events">Event shifts<span class="v">${ic('chev')}</span></a>` : ''}
     </div>
     <p class="gt">Lists</p>
     <div class="grp rise d1">
@@ -1982,6 +2048,8 @@ $app.addEventListener('click', (e) => {
     case 'napedit': ui.sheet = { type: 'nap', date: t.dataset.date }; return soft();
     case 'napset': { const v = t.dataset.t; saveKeyed('day_overrides', t.dataset.date, { nap_start: v, nap_end: addMin(v, +daySet().nap_minutes || 120) }); ui.sheet = null; return soft(); }
     case 'napclear': saveKeyed('day_overrides', t.dataset.date, { nap_start: null, nap_end: null }); ui.sheet = null; return soft();
+    case 'calowner': saveKeyed('day_settings', 1, { calendar_owner: t.dataset.v === 'me' ? myId() : partnerId() }); return soft();
+    case 'union': { const d = t.dataset.date; saveKeyed('day_overrides', d, { union_day: !unionOn(d) }); return soft([['.hero.shift', 'pop']]); }
     case 'actopen': ui.sheet = { type: 'activation', date: t.dataset.date }; return soft();
     case 'actsave': {
       const inp = $app.querySelector('[data-af="activated_from"]');
@@ -1995,6 +2063,7 @@ $app.addEventListener('click', (e) => {
       kickCalendar(true); return soft();
     }
     // kids
+    case 'ktaker': { const k = findRow('kid_items', id); if (k) updateRow('kid_items', id, { taker: takerOf(k) === t.dataset.v && k.taker ? null : t.dataset.v }); return soft(); }
     case 'kitem': ui.sheet = { type: 'kid', id }; return soft();
     case 'kstat': updateRow('kid_items', id, { status: t.dataset.s }); return soft([[`[data-act="kstat"][data-id="${id}"][data-s="${t.dataset.s}"]`, 'jelly']]);
     case 'ksend': { const k = findRow('kid_items', id); if (k) addGrocery(k.title); return soft([[`.it:has([data-id="${id}"]) .onlist`, 'pop']]); }

@@ -21,7 +21,8 @@
       if (q.get('theme')) override.theme = q.get('theme');
       if (q.get('dim')) override.dim = q.get('dim') !== '0';
       var c = /^(\d{1,2}):(\d{2})$/.exec(q.get('clock') || '');
-      if (c) { var d = new Date(); d.setHours(+c[1], +c[2], 0, 0); override.clock = d; }
+      var dy = /^(\d{4})-(\d{2})-(\d{2})$/.exec(q.get('day') || ''); // preview a different date
+      if (c || dy) { var d = new Date(); if (dy) d.setFullYear(+dy[1], +dy[2] - 1, +dy[3]); if (c) d.setHours(+c[1], +c[2], 0, 0); override.clock = d; }
     }
   }
 

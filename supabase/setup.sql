@@ -351,6 +351,15 @@ alter table public.grocery_items add column if not exists from_slot text check (
 -- Planning a recipe adds what it needs to grocery (Settings can turn this off).
 alter table public.day_settings add column if not exists auto_grocery boolean not null default true;
 
+-- Union days: a non-clinical day at the union EMS office, marked by hand. Office hours live in day_settings.
+alter table public.day_overrides add column if not exists union_day boolean not null default false;
+alter table public.day_settings add column if not exists union_start time not null default '09:00';
+alter table public.day_settings add column if not exists union_end time not null default '17:00';
+-- Whose calendar this is: their phone shows shift details; the other phone shows a short line.
+alter table public.day_settings add column if not exists calendar_owner uuid;
+-- Who's taking a kid appointment: a user id or 'both'. Empty means not decided (or the other parent if one is working).
+alter table public.kid_items add column if not exists taker text check (taker is null or char_length(taker) <= 40);
+
 -- Lunch planning is off until someone turns it on in Settings.
 alter table public.day_settings add column if not exists lunch_plan boolean not null default false;
 -- What the kitchen cooks with, for Copy for AI (e.g. {oven,air_fryer}).
