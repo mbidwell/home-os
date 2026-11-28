@@ -5,20 +5,21 @@ import * as S from './schedule.js';
 import * as D from './day.js';
 import * as M from './meals.js';
 import * as F from './fit.js';
+import * as C from './cheer.js';
 
-const VERSION = '19';
+const VERSION = '20';
 const T = window.homeosTheme;
 const Q = new URLSearchParams(location.search);
 const PREVIEW = T.isPreview ? Q.get('preview') : null; // local screenshots only
 const $app = document.getElementById('app');
-const K = { profiles: 'homeos-profiles', queue: 'homeos-queue', rows: 'homeos-rows', loc: 'homeos-kitchen-loc', later: 'homeos-partner-later', stores: 'homeos-store-memory', choreTab: 'homeos-chore-tab', lists: 'homeos-task-lists', who: 'homeos-chore-who', debug: 'homeos-debug', ktab: 'homeos-kitchen-tab', calapp: 'homeos-cal-app' };
+const K = { profiles: 'homeos-profiles', queue: 'homeos-queue', rows: 'homeos-rows', loc: 'homeos-kitchen-loc', later: 'homeos-partner-later', stores: 'homeos-store-memory', choreTab: 'homeos-chore-tab', lists: 'homeos-task-lists', who: 'homeos-chore-who', debug: 'homeos-debug', ktab: 'homeos-kitchen-tab', calapp: 'homeos-cal-app', seen: 'homeos-cheer-seen' };
 const TABLES = ['grocery_items', 'staples', 'pantry_items', 'tasks', 'task_events',
-  'calendar_events', 'calendar_sync', 'day_settings', 'day_overrides', 'kid_items', 'recipes', 'meal_plan'];
+  'calendar_events', 'calendar_sync', 'day_settings', 'day_overrides', 'kid_items', 'recipes', 'meal_plan', 'cheers'];
 // Tables keyed by something other than id.
 const PK = { calendar_events: 'uid', calendar_sync: 'source', day_settings: 'id', day_overrides: 'date', meal_plan: 'slot' };
 const pkOf = (t) => PK[t] || 'id';
 // Newer tables: if one isn't set up yet, keep going without it instead of failing the whole sync.
-const OPTIONAL = new Set(['calendar_events', 'calendar_sync', 'day_settings', 'day_overrides', 'kid_items', 'recipes', 'meal_plan']);
+const OPTIONAL = new Set(['calendar_events', 'calendar_sync', 'day_settings', 'day_overrides', 'kid_items', 'recipes', 'meal_plan', 'cheers']);
 // What each table pulls. History (task_events) is add-only: the most recent stretch is enough on a phone.
 const TABLE_Q = {
   task_events: 'task_events?select=*&order=at.desc&limit=800',
@@ -36,7 +37,7 @@ const ls = {
   del(k) { try { localStorage.removeItem(k); } catch {} }
 };
 
-const emptyRows = () => ({ grocery_items: [], staples: [], pantry_items: [], tasks: [], task_events: [], calendar_events: [], calendar_sync: [], day_settings: [], day_overrides: [], kid_items: [], recipes: [], meal_plan: [] });
+const emptyRows = () => ({ grocery_items: [], staples: [], pantry_items: [], tasks: [], task_events: [], calendar_events: [], calendar_sync: [], day_settings: [], day_overrides: [], kid_items: [], recipes: [], meal_plan: [], cheers: [] });
 const state = {
   profiles: ls.get(K.profiles, []),
   rows: { ...emptyRows(), ...ls.get(K.rows, {}) },
@@ -166,6 +167,8 @@ if (PREVIEW) {
   else if (Q.get('msheet') === 'kid') ui.sheet = { type: 'kid', id: 'k1' };
   else if (Q.get('msheet') === 'addcal') ui.sheet = { type: 'addcal', id: 'k1' };
   else if (Q.get('msheet')) ui.sheet = Q.get('msheet') === 'recipe' ? { type: 'recipe', id: 'r1' } : Q.get('msheet') === 'meal' ? { type: 'meal', slot: M.slotOf(S.addDays(today, 1)) } : { type: Q.get('msheet') };
+  state.rows.cheers = [{ id: 'n1', to_user: 'me', created_by: 'p', text: 'I love you. Thank you for everything you do.', created_at: now }, { id: 'n2', to_user: 'p', created_by: 'me', text: 'You make this house a home.', created_at: now }];
+  if (Q.get('cheer')) setTimeout(() => cheer(Q.get('cheer'), true), 600);
   if (Q.get('union')) state.rows.day_overrides.push({ date: today, union_day: true });
   if (Q.get('owner')) state.rows.day_settings[0].calendar_owner = Q.get('owner'); // 'me' or 'p' (see it as the partner)
   if (Q.get('cal')) ui.calTab = Q.get('cal');
@@ -617,11 +620,14 @@ const autoGrocery = () => daySet().auto_grocery !== false; // on unless turned o
 // grocery list, tagged with the day. Clearing or swapping the meal takes back what it added that isn't bought yet.
 function setMeal(slot, { recipe_id = null, text = null }) {
   const [date, meal] = slot.split(':');
+  const w0 = M.weekStart(date), wk = [0, 1, 2, 3, 4, 5, 6].map((i) => M.slotOf(S.addDays(w0, i)));
+  const fullBefore = wk.every((x) => mealOf(x));
   const before = findRow('meal_plan', slot);
   if (before && before.recipe_id !== recipe_id) unplanGrocery(slot);
   saveKeyed('meal_plan', slot, { date, meal, recipe_id, text });
   if (recipe_id && autoGrocery() && date >= todayStr()) addForMeal(slot);
   if (before && before.recipe_id && before.recipe_id !== recipe_id) topUpGrocery();
+  if (!fullBefore && meal === 'dinner' && wk.every((x) => mealOf(x))) setTimeout(() => cheer('meals', true), 300);
 }
 function addForMeal(slot) {
   const m = mealOf(slot), r = m && m.recipe_id ? findRow('recipes', m.recipe_id) : null;
@@ -1348,6 +1354,33 @@ function todayCards(today) {
   return cards.join('');
 }
 
+/* ---------- cheers: a little encouragement when things get done ---------- */
+const notesForMe = () => live('cheers').filter((n) => n.to_user === myId()).map((n) => ({ id: n.id, text: n.text, from: userName(n.created_by) }));
+const myNotes = () => live('cheers').filter((n) => n.created_by === myId()).sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)));
+let cheerTimer = 0;
+function cheer(kind, force = false) {
+  if (!force && !C.shouldCheer(kind, Math.random())) return;
+  const pn = partnerId() ? userName(partnerId()) : '';
+  const c = C.pickCheer(kind, { partner: pn === 'Partner' ? '' : pn, notes: notesForMe(), seen: ls.get(K.seen, []) });
+  if (c.noteId) ls.set(K.seen, [...new Set([...ls.get(K.seen, []), c.noteId])].slice(-200));
+  document.querySelector('.cheer')?.remove();
+  const el = document.createElement('div');
+  el.className = `cheer${kind === 'allDone' ? ' big' : ''}`;
+  el.setAttribute('role', 'status');
+  const still = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const bits = kind === 'allDone' && !still ? `<div class="confetti" aria-hidden="true">${Array.from({ length: 22 }, (_, i) => `<i style="--x:${(i * 37) % 100}%;--d:${(i % 5) * 0.08}s;--r:${(i * 53) % 360}deg"></i>`).join('')}</div>` : '';
+  el.innerHTML = `${bits}<p>${esc(c.text)}</p>${c.from ? `<small>from ${esc(c.from)} ♥</small>` : ''}`;
+  el.addEventListener('click', () => el.remove());
+  document.body.appendChild(el);
+  clearTimeout(cheerTimer);
+  cheerTimer = setTimeout(() => { el.classList.add('out'); setTimeout(() => el.remove(), 400); }, kind === 'allDone' || c.from ? 6000 : 3800);
+}
+// After checking something off: everything for today done is the big one; otherwise a small cheer.
+function cheerAfterDone(kind) {
+  const { mine, myTasks } = todoToday(todayStr());
+  if (!mine.length && !myTasks.length) cheer('allDone', true); else cheer(kind);
+}
+
 // To do today: chores and tasks due today or late, for me (and Either), with checkboxes right here.
 function todoToday(td) {
   const mineOrEither = (c) => !c.assignee || c.assignee === myId();
@@ -1369,7 +1402,7 @@ function todoHtml(td) {
   const n = mine.length + myTasks.length;
   const pn = partnerId() ? userName(partnerId()) : 'your partner';
   const foot = [doneToday && `${plural(doneToday, 'thing')} done today`, theirs && `${theirs} more for ${pn}`].filter(Boolean).join(' · ');
-  if (!n) return `${sec('To do today')}<div class="list todo rise d1"><p class="empty" style="margin:16px 4px">${doneToday ? `All done for today. ${plural(doneToday, 'thing')} checked off.` : 'Nothing due today.'}</p></div>${theirs ? `<p class="upd">${theirs} more for ${esc(pn)}</p>` : ''}`;
+  if (!n) return `${sec('To do today')}${doneToday ? `<div class="card alldone rise d1"><div class="ic">${ic('star')}</div><div><b>All done for today</b><small>${plural(doneToday, 'thing')} checked off. Go put your feet up.</small></div></div>` : `<div class="list todo rise d1"><p class="empty" style="margin:16px 4px">Nothing due today.</p></div>`}${theirs ? `<p class="upd">${theirs} more for ${esc(pn)}</p>` : ''}`;
   return `${sec('To do today', n)}<div class="list todo rise d1">${mine.map((c) => choreRow(c, td)).join('')}${myTasks.map((t) => taskRowToday(t, td)).join('')}</div>${foot ? `<p class="upd">${esc(foot)}</p>` : ''}`;
 }
 
@@ -1688,6 +1721,13 @@ function settingsView() {
       ${mine() ? `<button class="fl press" data-act="calsync">Sync now<span class="v">${ic('reset')}</span></button>
       <a class="fl press" href="#/events">Event shifts<span class="v">${ic('chev')}</span></a>` : ''}
     </div>
+    ${partnerId() ? `<p class="gt">Notes for ${esc(userName(partnerId()))}</p>
+    <div class="grp rise d1 notes">
+      <p class="hint" style="margin:12px 0 8px">Little notes that pop up for ${esc(userName(partnerId()))} now and then when they finish something. They won’t see this list.</p>
+      <form class="qa slim" data-form="cheeradd" autocomplete="off" style="margin:0 0 10px"><div class="row"><input class="fld" name="name" type="text" placeholder="I love you. Thanks for everything you do." maxlength="200" enterkeyhint="done" aria-label="Note"><button class="add press" type="submit" aria-label="Add">${ic('plus')}</button></div></form>
+      ${myNotes().map((n) => `<div class="fl note"><span>${esc(n.text)}</span><button class="plus press" data-act="cheerdel" data-id="${n.id}" aria-label="Remove note">${ic('x')}</button></div>`).join('')}
+      <button class="fl press" data-act="cheertry">Preview a cheer<span class="v">${ic('star')}</span></button>
+    </div>` : ''}
     <p class="gt">Lists</p>
     <div class="grp rise d1">
       <label class="fl press">Import Costco list<span class="v">${costco ? `${costco} items` : 'CSV file'}</span><input class="hide" type="file" accept=".csv,text/csv" data-act="costcocsv"></label>
@@ -1831,6 +1871,13 @@ $app.addEventListener('submit', async (e) => {
     render({ soft: true, keepFocus: `[data-form="${kind}"] .fld`, fx: [[`.it:has([data-id="${k.id}"])`, 'pop']] });
     return;
   }
+  if (kind === 'cheeradd') {
+    const text = f.name.value.trim().slice(0, 200);
+    if (!text || !partnerId()) return;
+    insertRow('cheers', { to_user: partnerId(), created_by: myId(), text });
+    render({ soft: true, keepFocus: '[data-form="cheeradd"] .fld' });
+    return;
+  }
   if (kind === 'radd') {
     const name = f.name.value.trim();
     if (!name) return;
@@ -1921,7 +1968,7 @@ $app.addEventListener('click', (e) => {
       if (verTaps >= 5) { verTaps = 0; ls.set(K.debug, !ls.get(K.debug, false)); debugReadout(); }
       return;
     // grocery
-    case 'gcheck': toggleGrocery(id); return soft([[`[data-act="gcheck"][data-id="${id}"]`, 'jelly']]);
+    case 'gcheck': { const was = groceryOpen().length; toggleGrocery(id); if (was > 0 && !groceryOpen().length) setTimeout(() => cheer('grocery', true), 300); return soft([[`[data-act="gcheck"][data-id="${id}"]`, 'jelly']]); }
     case 'gclear': groceryDone().forEach((g) => removeRow('grocery_items', g.id)); return soft();
     case 'gitem': ui.sheet = { type: 'gitem', id }; return soft();
     case 'gstore': {
@@ -2060,7 +2107,7 @@ $app.addEventListener('click', (e) => {
       if (a === 'cdone' && t.classList.contains('cb')) {
         // Check, squish, then the row moves on to its next date.
         t.classList.add('on', 'jelly'); t.innerHTML = ic('check');
-        setTimeout(() => { closeChore(c, 'done'); soft(); }, matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 380);
+        setTimeout(() => { closeChore(c, 'done'); soft(); cheerAfterDone('chore'); }, matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 380);
         return;
       }
       closeChore(c, a === 'cdone' ? 'done' : 'skip'); return soft(ui.sheet ? [['.bs .hint', 'pop']] : null);
@@ -2070,7 +2117,7 @@ $app.addEventListener('click', (e) => {
       t.classList.add('ld');
       const still = matchMedia('(prefers-reduced-motion: reduce)').matches;
       setTimeout(() => t.classList.add('ok'), still ? 0 : 280);
-      setTimeout(() => { closeChore(c, 'done'); soft(); }, still ? 0 : 820);
+      setTimeout(() => { closeChore(c, 'done'); soft(); cheerAfterDone('chore'); }, still ? 0 : 820);
       return;
     }
     case 'cnew': { const c = newChore(); ui.sheet = { type: 'chore', id: c.id }; render({ soft: true, keepFocus: '.bs .ttl' }); $app.querySelector('.bs .ttl')?.select(); return; }
@@ -2102,7 +2149,7 @@ $app.addEventListener('click', (e) => {
     case 'tdone': {
       const x = findRow('tasks', id); if (!x) return;
       if (x.done_at) updateRow('tasks', id, { done_at: null });
-      else { recordEvent(x, 'done', x.due_date || todayStr()); updateRow('tasks', id, { done_at: new Date().toISOString() }); }
+      else { recordEvent(x, 'done', x.due_date || todayStr()); updateRow('tasks', id, { done_at: new Date().toISOString() }); setTimeout(() => cheerAfterDone('task'), 250); }
       return soft([[`[data-act="tdone"][data-id="${id}"]`, 'jelly']]);
     }
     case 'titem': ui.sheet = { type: 'task', id }; return soft();
@@ -2115,6 +2162,8 @@ $app.addEventListener('click', (e) => {
     case 'napedit': ui.sheet = { type: 'nap', date: t.dataset.date }; return soft();
     case 'napset': { const v = t.dataset.t; saveKeyed('day_overrides', t.dataset.date, { nap_start: v, nap_end: addMin(v, +daySet().nap_minutes || 120) }); ui.sheet = null; return soft(); }
     case 'napclear': saveKeyed('day_overrides', t.dataset.date, { nap_start: null, nap_end: null }); ui.sheet = null; return soft();
+    case 'cheerdel': removeRow('cheers', id); return soft();
+    case 'cheertry': cheer('chore', true); return;
     case 'calowner': saveKeyed('day_settings', 1, { calendar_owner: t.dataset.v === 'me' ? myId() : partnerId() }); return soft();
     case 'union': { const d = t.dataset.date; saveKeyed('day_overrides', d, { union_day: !unionOn(d) }); return soft([['.hero.shift', 'pop']]); }
     case 'actopen': ui.sheet = { type: 'activation', date: t.dataset.date }; return soft();

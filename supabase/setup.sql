@@ -393,6 +393,37 @@ begin
   end loop;
 end $$;
 
+-- 10. Cheers: short notes one partner writes for the other, shown now and then when they finish something.
+create table if not exists public.cheers (
+  id         uuid primary key default gen_random_uuid(),
+  to_user    uuid not null,
+  created_by uuid not null default auth.uid(),
+  text       text not null check (char_length(btrim(text)) between 1 and 200),
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  deleted_at timestamptz
+);
+do $$
+begin
+  alter table public.cheers enable row level security;
+  create or replace trigger cheers_touch before update on public.cheers for each row execute function public.touch_updated_at();
+  if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'cheers' and policyname = 'members read') then
+    create policy "members read" on public.cheers for select to authenticated using (public.is_household_member());
+  end if;
+  if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'cheers' and policyname = 'members add') then
+    create policy "members add" on public.cheers for insert to authenticated with check (public.is_household_member() and created_by = auth.uid());
+  end if;
+  if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'cheers' and policyname = 'members edit') then
+    create policy "members edit" on public.cheers for update to authenticated using (public.is_household_member()) with check (public.is_household_member());
+  end if;
+  revoke all on public.cheers from anon;
+  grant select, insert, update on public.cheers to authenticated;
+  if exists (select 1 from pg_publication where pubname = 'supabase_realtime')
+     and not exists (select 1 from pg_publication_tables where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = 'cheers') then
+    alter publication supabase_realtime add table public.cheers;
+  end if;
+end $$;
+
 -- 8. Calendar sync every 30 minutes (after deploying the calendar-sync function).
 --    Replace PROJECT-REF with your project's ref (the part before .supabase.co).
 --

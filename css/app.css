@@ -495,3 +495,22 @@ a.cal { text-decoration: none; }
 .fitrow { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: -6px 0 8px 32px; font: 600 13px var(--f-body); color: var(--ink2); }
 .fitrow span { flex: 1; min-width: 0; }
 .lnk2 { font: inherit; font-weight: 700; color: inherit; text-decoration: underline; text-underline-offset: 2px; padding: 4px 0; }
+
+/* ---------- cheers ---------- */
+.cheer { position: fixed; left: 16px; right: 16px; bottom: calc(env(safe-area-inset-bottom) + 108px); z-index: 50; background: var(--hero); color: var(--hero-ink); border-radius: 22px; padding: 16px 18px; box-shadow: 0 14px 40px rgba(0,0,0,.28); animation: cheerIn .42s cubic-bezier(.3,.7,.4,1.4) both; overflow: hidden; max-width: 480px; margin: 0 auto; }
+.cheer p { margin: 0; font: 700 16px/1.35 var(--f-body); }
+.cheer small { display: block; margin-top: 6px; font: 600 13px var(--f-body); color: var(--hero-ink2); }
+.cheer.big { padding: 22px 20px; }
+.cheer.big p { font-size: 18px; }
+.cheer.out { animation: cheerOut .35s ease both; }
+@keyframes cheerIn { from { opacity: 0; transform: translateY(18px) scale(.94); } }
+@keyframes cheerOut { to { opacity: 0; transform: translateY(12px) scale(.97); } }
+.confetti { position: absolute; inset: 0; pointer-events: none; }
+.confetti i { position: absolute; top: -10px; left: var(--x); width: 7px; height: 11px; border-radius: 2px; background: var(--acc); transform: rotate(var(--r)); animation: fall 1.4s var(--d) cubic-bezier(.2,.6,.4,1) both; opacity: .9; }
+.confetti i:nth-child(3n) { background: var(--ok); }
+.confetti i:nth-child(3n+1) { background: var(--hero-ink2); }
+@keyframes fall { to { transform: translateY(150px) rotate(calc(var(--r) + 300deg)); opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .cheer, .cheer.out { animation: none; } }
+.card.alldone .ic svg.i { fill: currentColor; }
+.notes .note { align-items: center; gap: 10px; }
+.notes .note span { flex: 1; min-width: 0; font-weight: 500; overflow-wrap: anywhere; }
