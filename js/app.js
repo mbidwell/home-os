@@ -9,7 +9,7 @@ import * as C from './cheer.js';
 import * as A from './aisles.js';
 import * as R from './routines.js';
 
-const VERSION = '25';
+const VERSION = '26';
 const T = window.homeosTheme;
 const Q = new URLSearchParams(location.search);
 const PREVIEW = T.isPreview ? Q.get('preview') : null; // local screenshots only
@@ -1898,7 +1898,9 @@ function settingsView() {
       <p class="hint" style="margin:0 0 14px">Shared. Copy for AI only suggests ways to cook that you have.</p></div>
     <p class="gt" style="margin-top:18px">Calendar</p>
     <div class="grp rise d1">
-      <div class="fl">Shifts belong to<span class="seg sm"><button class="${calOwner() === myId() ? 'on' : ''}" data-act="calowner" data-v="me" aria-pressed="${calOwner() === myId()}">${esc(myName() || 'Me')}</button>${partnerId() ? `<button class="${calOwner() && calOwner() === partnerId() ? 'on' : ''}" data-act="calowner" data-v="partner" aria-pressed="${calOwner() === partnerId()}">${esc(userName(partnerId()))}</button>` : ''}</span></div>
+      ${calOwner() && !ui.ownerEdit
+        ? `<div class="fl">Shifts belong to<span class="v">${esc(calOwner() === myId() ? `${myName() || 'You'} (you)` : ownerName())}<button class="lnk2 press" data-act="ownerchange" style="margin-left:10px">Change</button></span></div><p class="hint" style="margin:0 0 12px">Shared by both phones: it’s whose work schedule the calendar reads.</p>`
+        : `<div class="fl">Shifts belong to<span class="seg sm"><button class="${calOwner() === myId() ? 'on' : ''}" data-act="calowner" data-v="me" aria-pressed="${calOwner() === myId()}">${esc(myName() || 'Me')}</button>${partnerId() ? `<button class="${calOwner() && calOwner() === partnerId() ? 'on' : ''}" data-act="calowner" data-v="partner" aria-pressed="${calOwner() === partnerId()}">${esc(userName(partnerId()))}</button>` : ''}</span></div><p class="hint" style="margin:0 0 12px">Pick whose work schedule the calendar reads. This is shared by both phones.</p>`}
       ${!mine() ? `<p class="hint" style="margin:0 0 12px">You see ${esc(ownerName())}’s calendar. The activation and union buttons are only on their phone.</p>` : ''}
       ${!mine() ? '' : calSync().setup ? calSync().rows.map((r) => `<div class="fl">${r.source === 'google' ? 'Google' : 'Outlook'}<span class="v">${r.last_error ? esc(r.last_error) : r.last_ok_at ? `Updated ${timeOf(r.last_ok_at)}` : 'Waiting'}</span></div>`).join('') : '<div class="fl">Not connected<span class="v">See README, step 10</span></div>'}
       ${mine() ? `<button class="fl press${ui.calSyncing === 'busy' ? ' busy' : ''}" data-act="calsync" aria-live="polite">Sync now<span class="v">${ui.calSyncing === 'busy' ? '<i class="spin" aria-hidden="true"></i>Syncing' : ui.calSyncing === 'ok' ? `${ic('check')}Updated ${timeOf(ui.calSyncedAt)}` : ui.calSyncing === 'err' ? 'Couldn’t sync' : ic('reset')}</span></button>
@@ -2385,7 +2387,8 @@ $app.addEventListener('click', (e) => {
     case 'moreheads': ui.allHeads = !ui.allHeads; return soft();
     case 'recap': cheer('allDone', true, `This week you two did ${t.dataset.n} things together. That’s a team.`); return;
     case 'backup': downloadBackup(); return soft([[`[data-act="backup"]`, 'jelly']]);
-    case 'calowner': saveKeyed('day_settings', 1, { calendar_owner: t.dataset.v === 'me' ? myId() : partnerId() }); return soft();
+    case 'ownerchange': if (!confirm('This changes it on both phones. Change whose shifts these are?')) return; ui.ownerEdit = true; return soft();
+    case 'calowner': saveKeyed('day_settings', 1, { calendar_owner: t.dataset.v === 'me' ? myId() : partnerId() }); ui.ownerEdit = false; return soft();
     case 'union': { const d = t.dataset.date; saveKeyed('day_overrides', d, { union_day: !unionOn(d) }); return soft([['.hero.shift', 'pop']]); }
     case 'actopen': ui.sheet = { type: 'activation', date: t.dataset.date }; return soft();
     case 'actsave': {
