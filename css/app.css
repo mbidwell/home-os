@@ -469,3 +469,4 @@ button { background: none; border: 0; padding: 0; cursor: pointer; }
 .card.thaw { align-items: center; }
 .card.thaw > div:nth-child(2) { flex: 1; min-width: 0; }
 .card.thaw .mini { flex: none; }
+.meth { padding: 2px 0 12px; }

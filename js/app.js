@@ -5,7 +5,7 @@ import * as S from './schedule.js';
 import * as D from './day.js';
 import * as M from './meals.js';
 
-const VERSION = '7';
+const VERSION = '8';
 const T = window.homeosTheme;
 const Q = new URLSearchParams(location.search);
 const PREVIEW = T.isPreview ? Q.get('preview') : null; // local screenshots only
@@ -139,9 +139,9 @@ if (PREVIEW) {
   const rc = (id, title, ingredients, o = {}) => ({ id, title, ingredients, steps: null, source_url: null, notes: null, created_at: now, ...o });
   state.rows.recipes = [
     rc('r1', 'Chicken tacos', '1.5 lb chicken thighs\n8 small tortillas\n1 cup shredded cheese\n2 limes\n1 onion\nTaco seasoning',
-      { favorite: true, quick: true, kid_friendly: true, source_url: 'https://example.com/chicken-tacos', steps: 'Season the chicken and sear 6 minutes a side.\nRest, then slice thin.\nWarm the tortillas; top with chicken, cheese, onion, and lime.', notes: 'Kids like it without onion.' }),
-    rc('r2', 'Sheet pan salmon', '4 salmon fillets\n1 lb green beans\n2 tbsp olive oil\n1 lemon\nSalt', { quick: true }),
-    rc('r3', 'Slow cooker chili', '1 lb ground beef\n1 (15 oz) can black beans\n1 (15 oz) can kidney beans\n1 can crushed tomatoes\n1 onion\n2 tbsp chili powder\nShredded cheese'),
+      { favorite: true, quick: true, kid_friendly: true, method: 'stove', source_url: 'https://example.com/chicken-tacos', steps: 'Season the chicken and sear 6 minutes a side.\nRest, then slice thin.\nWarm the tortillas; top with chicken, cheese, onion, and lime.', notes: 'Kids like it without onion.' }),
+    rc('r2', 'Sheet pan salmon', '4 salmon fillets\n1 lb green beans\n2 tbsp olive oil\n1 lemon\nSalt', { quick: true, method: 'sheet_pan' }),
+    rc('r3', 'Slow cooker chili', '1 lb ground beef\n1 (15 oz) can black beans\n1 (15 oz) can kidney beans\n1 can crushed tomatoes\n1 onion\n2 tbsp chili powder\nShredded cheese', { method: 'slow_cooker' }),
     rc('r4', 'Pasta with peas', '1 lb pasta\n2 cups frozen peas\n2 tbsp butter\nParmesan')
   ];
   const wk0 = M.weekStart(today), mp = (d, meal, o) => ({ slot: M.slotOf(S.addDays(wk0, d), meal), date: S.addDays(wk0, d), meal, recipe_id: null, text: null, ...o });
@@ -158,7 +158,7 @@ if (PREVIEW) {
       { date: S.addDays(wk0, 3), meal: 'dinner', title: 'Sheet pan gnocchi', cur: '', on: true },
       { date: S.addDays(wk0, 4), meal: 'dinner', title: 'Pasta with peas', cur: 'Pizza night', on: false },
       { date: S.addDays(wk0, 6), meal: 'dinner', title: 'Chicken tacos', cur: '', on: true }],
-      recipes: [{ title: 'Sheet pan gnocchi', ingredients: '1 lb gnocchi\n1 pint cherry tomatoes\n1 red onion\n2 tbsp olive oil\nItalian sausage', steps: 'Heat the oven to 425.\nToss everything on a sheet pan.\nRoast 20 minutes.', notes: null, source_url: null, on: true }] };
+      recipes: [{ title: 'Sheet pan gnocchi', method: 'sheet_pan', ingredients: '1 lb gnocchi\n1 pint cherry tomatoes\n1 red onion\n2 tbsp olive oil\nItalian sausage', steps: 'Heat the oven to 425.\nToss everything on a sheet pan.\nRoast 20 minutes.', notes: null, source_url: null, on: true }] };
   }
   if (Q.get('msheet')) ui.sheet = Q.get('msheet') === 'recipe' ? { type: 'recipe', id: 'r1' } : Q.get('msheet') === 'meal' ? { type: 'meal', slot: M.slotOf(S.addDays(wk0, 3)) } : { type: Q.get('msheet') };
   if (Q.get('cal')) ui.calTab = Q.get('cal');
@@ -632,7 +632,7 @@ function lastHad(id) {
   return live('meal_plan').filter((m) => m.recipe_id === id && m.date < td).reduce((a, m) => (m.date > a ? m.date : a), '');
 }
 const hadLine = (r) => { const d = lastHad(r.id); return d ? `had ${M.agoLabel(d, todayStr())}` : 'not had yet'; };
-const tagLine = (r) => [r.quick && 'Quick', r.kid_friendly && 'Kids like it'].filter(Boolean).join(' · ');
+const tagLine = (r) => [M.methodLabel(r.method), r.quick && 'Quick', r.kid_friendly && 'Kids like it'].filter(Boolean).join(' · ');
 // Freezer items needed for a day's planned meals: [{ item, recipe }].
 function thawFor(date) {
   const frozen = pantry().filter((p) => (p.location === 'freezer' || p.location === 'garage_freezer') && p.status !== 'out');
@@ -663,7 +663,7 @@ function mealsView() {
     const r = m && m.recipe_id ? findRow('recipes', m.recipe_id) : null, n = ingCount(r);
     const tag = meal === 'lunch' ? '<span class="ml">Lunch</span>' : '';
     return m
-      ? `<button class="m press${meal === 'lunch' ? ' lu' : ''}" data-act="mslot" data-slot="${slot}">${tag}<span>${r && r.favorite ? `<span class="favi">${ic('star')}</span>` : ''}${esc(mealTitle(m))}</span>${r ? `<small>Recipe${n ? ` · ${plural(n, 'ingredient')}` : ''}</small>` : ''}</button>`
+      ? `<button class="m press${meal === 'lunch' ? ' lu' : ''}" data-act="mslot" data-slot="${slot}">${tag}<span>${r && r.favorite ? `<span class="favi">${ic('star')}</span>` : ''}${esc(mealTitle(m))}</span>${r ? `<small>${esc(M.methodLabel(r.method) || 'Recipe')}${n ? ` · ${plural(n, 'ingredient')}` : ''}</small>` : ''}</button>`
       : `<button class="m open press${meal === 'lunch' ? ' lu' : ''}" data-act="mslot" data-slot="${slot}">+ ${meal === 'lunch' ? 'Lunch' : awayOn(d) ? 'Plan a smaller dinner' : 'Plan dinner'}</button>`;
   };
   const rows = days.map((d) => `<div class="pday${d === td ? ' today' : ''}${d < td ? ' past' : ''}"><span class="d"><b>${shortDay(d, { weekday: 'short' })}</b>${shortDay(d, { month: 'short', day: 'numeric' })}${awayOn(d) ? '<i class="dtag">Shift</i>' : onCallOn(d) ? '<i class="dtag">On call</i>' : ''}</span><div class="ms">${line(d, 'dinner')}${lunch ? line(d, 'lunch') : ''}</div></div>`).join('');
@@ -716,6 +716,8 @@ function recipeSheet(r) {
   const link = r.source_url && /^https?:\/\//i.test(r.source_url) ? `<a class="src press" href="${esc(r.source_url)}" target="_blank" rel="noopener">${ic('link')}Open the recipe page</a>` : '';
   return `<h2><input class="ttl" data-rf="title" data-id="${r.id}" value="${esc(r.title)}" maxlength="120" aria-label="Recipe name" enterkeyhint="done">${star(r)}<button class="lnk" data-act="close">Done</button></h2>
     <div class="scroll">
+      ${sec('How to cook')}
+      <div class="gear meth">${M.METHODS.map(([k, l]) => `<button class="pick press${r.method === k ? ' on' : ''}" data-act="rmethod" data-k="${k}" data-id="${r.id}" aria-pressed="${r.method === k}">${l}</button>`).join('')}</div>
       <div class="list frm">
         <button class="frow swr" role="switch" aria-checked="${!!r.quick}" data-act="rtag" data-k="quick" data-id="${r.id}">Quick (30 minutes or less)<span class="tg" aria-hidden="true"></span></button>
         <button class="frow swr" role="switch" aria-checked="${!!r.kid_friendly}" data-act="rtag" data-k="kid_friendly" data-id="${r.id}">Kids like it<span class="tg" aria-hidden="true"></span></button>
@@ -827,7 +829,7 @@ function planSheet() {
     <p class="hint" style="margin-top:0">Days you’ve already planned start unchecked.</p>
     <div class="scroll">
       ${sec('Meals', p.slots.length)}<div class="list">${p.slots.map((x, i) => row(x.on, 'ptog', i, `${shortDay(x.date, { weekday: 'short' })}${x.meal === 'lunch' ? ' lunch' : ''} · ${esc(x.title)}`, `<small>${kind(x)}</small>${x.cur ? `<span class="have lo">Replaces ${esc(x.cur)}</span>` : ''}`)).join('')}</div>
-      ${p.recipes.length ? `${sec('New recipes', p.recipes.length)}<div class="list">${p.recipes.map((r, i) => row(r.on, 'rtog', i, esc(r.title), `<small>${plural(ingCount(r), 'ingredient')}${r.steps ? ` · ${plural(r.steps.split('\n').length, 'step')}` : ''}</small>`)).join('')}</div>` : ''}
+      ${p.recipes.length ? `${sec('New recipes', p.recipes.length)}<div class="list">${p.recipes.map((r, i) => row(r.on, 'rtog', i, esc(r.title), `<small>${r.method ? `${M.methodLabel(r.method)} · ` : ''}${plural(ingCount(r), 'ingredient')}${r.steps ? ` · ${plural(r.steps.split('\n').length, 'step')}` : ''}</small>`)).join('')}</div>` : ''}
     </div>
     <div class="foot2"><button class="pri press" data-act="planapply"${n || nr ? '' : ' disabled'}>${ic('check')}${n ? `Fill ${plural(n, 'meal')}` : nr ? `Save ${plural(nr, 'recipe')}` : 'Nothing checked'}</button></div>`;
 }
@@ -1121,7 +1123,8 @@ function timeline(date) {
   items.push(napSet
     ? { k: hm(nap[0]), t: span(nap[0], nap[1]), w: 'Nap', sub: '', nap: true }
     : { k: hm(nap[0]), t: span(nap[0], nap[1]), w: 'Nap', sub: `About ${napLen(ds.nap_minutes)}`, nap: true, window: true });
-  const din = mealTitle(mealOf(M.slotOf(date))), lun = lunchOn() ? mealTitle(mealOf(M.slotOf(date, 'lunch'))) : '';
+  const withHow = (m) => { const t = mealTitle(m), r = m && m.recipe_id ? findRow('recipes', m.recipe_id) : null, k = r && M.methodLabel(r.method); return t && k ? `${t} · ${k}` : t; };
+  const din = withHow(mealOf(M.slotOf(date))), lun = lunchOn() ? withHow(mealOf(M.slotOf(date, 'lunch'))) : '';
   if (lun) items.push({ k: '12:00', t: clock('12:00'), w: 'Lunch', sub: lun });
   items.push({ k: hm(ds.dinner), t: clock(ds.dinner), w: 'Dinner', sub: din });
   items.push({ k: hm(ds.bed), t: clock(ds.bed), w: 'Bed' });
@@ -1474,7 +1477,7 @@ function settingsView() {
     </div>
     <p class="gt" style="margin-top:18px">Cooking with</p>
     <div class="grp rise d1"><div class="gear">${GEAR.map(([k, l]) => `<button class="pick press${gear().includes(k) ? ' on' : ''}" data-act="gear" data-v="${k}" aria-pressed="${gear().includes(k)}">${l}</button>`).join('')}</div>
-      <p class="hint" style="margin:0 0 14px">Shared. Copy for AI uses it to suggest meals you can make.</p></div>
+      <p class="hint" style="margin:0 0 14px">Shared. Copy for AI only suggests ways to cook that you have.</p></div>
     <p class="gt" style="margin-top:18px">Calendar</p>
     <div class="grp rise d1">
       ${calSync().setup ? calSync().rows.map((r) => `<div class="fl">${r.source === 'google' ? 'Google' : 'Outlook'}<span class="v">${r.last_error ? esc(r.last_error) : r.last_ok_at ? `Updated ${timeOf(r.last_ok_at)}` : 'Waiting'}</span></div>`).join('') : '<div class="fl">Not connected<span class="v">See README, step 10</span></div>'}
@@ -1758,6 +1761,7 @@ $app.addEventListener('click', (e) => {
     }
     case 'mclear': { const slot = t.dataset.slot, [date, meal] = slot.split(':'); saveKeyed('meal_plan', slot, { date, meal, recipe_id: null, text: null }); ui.sheet = null; return soft(); }
     case 'rfav': { const r = findRow('recipes', id); if (r) updateRow('recipes', id, { favorite: !r.favorite }); return soft([[`[data-act="rfav"][data-id="${id}"]`, 'jelly']]); }
+    case 'rmethod': { const r = findRow('recipes', id); if (r) updateRow('recipes', id, { method: r.method === t.dataset.k ? null : t.dataset.k }); return soft([[`[data-act="rmethod"][data-k="${t.dataset.k}"]`, 'jelly']]); }
     case 'rtag': { const r = findRow('recipes', id); if (r) updateRow('recipes', id, { [t.dataset.k]: !r[t.dataset.k] }); return soft(); }
     case 'ragain': {
       const d = t.dataset.date, slot = M.slotOf(d), cur = findRow('meal_plan', slot);

@@ -344,6 +344,8 @@ alter table public.recipes add column if not exists favorite boolean not null de
 -- Tags: quick (30 minutes or less) and kids like it.
 alter table public.recipes add column if not exists quick boolean not null default false;
 alter table public.recipes add column if not exists kid_friendly boolean not null default false;
+-- How it's cooked: stove, oven, sheet_pan, air_fryer, pressure_cooker, slow_cooker, grill, microwave, no_cook.
+alter table public.recipes add column if not exists method text check (method is null or char_length(method) <= 30);
 
 -- Lunch planning is off until someone turns it on in Settings.
 alter table public.day_settings add column if not exists lunch_plan boolean not null default false;

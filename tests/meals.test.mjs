@@ -80,8 +80,8 @@ test('lunch shows up only when it is turned on', () => {
 
 test('cooking gear is mentioned when set, and left out when not', () => {
   const base = { range: 'x', kitchen: {}, low: [], out: [], days: [], recipes: [] };
-  assert.match(buildPrompt({ ...base, gear: ['oven', 'air fryer'] }), /We cook with: oven, air fryer\./);
-  assert.doesNotMatch(buildPrompt(base), /cook with/);
+  assert.match(buildPrompt({ ...base, gear: ['oven', 'air fryer'] }), /Appliances we have: oven, air fryer\. Only use these\./);
+  assert.doesNotMatch(buildPrompt(base), /Appliances/);
 });
 
 import { parsePlan, sameTitle } from '../js/meals.js';
@@ -166,4 +166,25 @@ test('last had labels', () => {
   assert.equal(agoLabel('2026-11-20', '2026-11-28'), '8 days ago');
   assert.equal(agoLabel('2026-11-07', '2026-11-28'), '3 weeks ago');
   assert.equal(agoLabel('2026-08-28', '2026-11-28'), '3 months ago');
+});
+
+import { methodKey, methodLabel } from '../js/meals.js';
+test('how to cook: read from text, most specific first', () => {
+  assert.equal(methodKey('Slow cooker, low 6 hours'), 'slow_cooker');
+  assert.equal(methodKey('Crock-Pot'), 'slow_cooker');
+  assert.equal(methodKey('sheet pan in the oven'), 'sheet_pan');
+  assert.equal(methodKey('Instant Pot'), 'pressure_cooker');
+  assert.equal(methodKey('Air fryer'), 'air_fryer');
+  assert.equal(methodKey('Bake at 400'), 'oven');
+  assert.equal(methodKey('skillet'), 'stove');
+  assert.equal(methodKey('whatever'), null);
+  assert.equal(methodLabel('sheet_pan'), 'Sheet pan');
+});
+
+test('a pasted recipe keeps its method, and the prompt asks for one', () => {
+  assert.equal(parsePasted('Gnocchi\nMethod: Sheet pan\nIngredients\n- gnocchi').method, 'sheet_pan');
+  assert.equal(parsePasted('Gnocchi\nIngredients\n- gnocchi').method, null);
+  const p = buildPrompt({ range: 'x', kitchen: {}, low: [], out: [], days: [], recipes: [{ title: 'Chili', method: 'slow_cooker', quick: true }] });
+  assert.match(p, /RECIPE: Title\nMethod: one of stove, oven, sheet pan/);
+  assert.match(p, /- Chili \[slow cooker, quick\]/);
 });

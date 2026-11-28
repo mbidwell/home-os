@@ -68,15 +68,30 @@ const HEAD = {
 };
 
 /** A recipe pasted back from an AI chat (or a website): title, ingredients, steps, notes, and a link if there is one. */
+/** How a recipe is cooked. Keys are stored; labels are shown and sent to the AI. */
+export const METHODS = [['stove', 'Stove'], ['oven', 'Oven'], ['sheet_pan', 'Sheet pan'], ['air_fryer', 'Air fryer'], ['pressure_cooker', 'Pressure cooker'],
+  ['slow_cooker', 'Slow cooker'], ['grill', 'Grill'], ['microwave', 'Microwave'], ['no_cook', 'No cook']];
+export const methodLabel = (k) => (METHODS.find((m) => m[0] === k) || [null, ''])[1];
+/** "Slow cooker (low 6 hours)" -> 'slow_cooker'. Most specific first: "sheet pan in the oven" is a sheet pan. */
+export function methodKey(text) {
+  const t = String(text || '').toLowerCase();
+  const rules = [['sheet_pan', /sheet[ -]?pan/], ['slow_cooker', /slow[ -]?cooker|crock[ -]?pot/], ['pressure_cooker', /pressure[ -]?cooker|instant[ -]?pot/],
+    ['air_fryer', /air[ -]?fr/], ['grill', /grill/], ['microwave', /microwave/], ['no_cook', /no[ -]?cook/], ['oven', /oven|bake|roast/], ['stove', /stove|skillet|pan|pot|saut/]];
+  const hit = rules.find(([, re]) => re.test(t));
+  return hit ? hit[0] : null;
+}
+
 export function parsePasted(text) {
   const lines = String(text || '').replace(/\r/g, '').split('\n');
-  const out = { title: '', ingredients: [], steps: [], notes: [], source_url: null };
+  const out = { title: '', ingredients: [], steps: [], notes: [], source_url: null, method: null };
   let part = null;
   for (let raw of lines) {
     const l = raw.replace(/^#+\s*/, '').replace(/\*\*/g, '').trim();
     if (!l) continue;
     const url = l.match(/https?:\/\/\S+/);
     if (url && !out.source_url) { out.source_url = url[0].replace(/[).,]+$/, ''); if (l === url[0]) continue; }
+    const mm = l.match(/^(?:method|how to cook|cook(?:ing)? method|cook with)\s*:\s*(.+)$/i);
+    if (mm) { out.method = methodKey(mm[1]); continue; }
     const h = Object.keys(HEAD).find((k) => HEAD[k].test(l));
     if (h) { part = h; continue; }
     if (!out.title && !part) { out.title = l.replace(/^(?:recipe|title)\s*:\s*/i, '').replace(/[:.]$/, ''); continue; }
@@ -90,7 +105,8 @@ export function parsePasted(text) {
     ingredients: out.ingredients.join('\n') || null,
     steps: out.steps.join('\n') || null,
     notes: out.notes.join('\n') || null,
-    source_url: out.source_url
+    source_url: out.source_url,
+    method: out.method
   };
 }
 
@@ -103,7 +119,7 @@ export function parsePasted(text) {
 export function buildPrompt({ range, kitchen, low, out, days, recipes, lunch = false, gear = [], recent = [] }) {
   const L = [];
   L.push(`Help me plan ${lunch ? 'lunches and dinners' : 'dinners'} for ${range} for our family: two adults and two young kids. Keep weeknights simple; one-pot and sheet-pan meals are good options.`);
-  if (gear.length) L.push(`We cook with: ${gear.join(', ')}. Recipes that use these are great.`);
+  if (gear.length) L.push(`Appliances we have: ${gear.join(', ')}. Only use these.`);
   L.push('');
   L.push('In the kitchen now:');
   const places = Object.entries(kitchen).filter(([, xs]) => xs.length);
@@ -131,7 +147,7 @@ export function buildPrompt({ range, kitchen, low, out, days, recipes, lunch = f
     L.push('Recipes we already like:');
     for (const r of recipes) {
       const ing = ingredientLines(r.ingredients).map((x) => parseIngredient(x).name);
-      const tags = [r.quick && 'quick', r.kid_friendly && 'kids like it'].filter(Boolean);
+      const tags = [methodLabel(r.method).toLowerCase(), r.quick && 'quick', r.kid_friendly && 'kids like it'].filter(Boolean);
       L.push(`- ${r.title}${tags.length ? ` [${tags.join(', ')}]` : ''}${ing.length ? ` (${ing.slice(0, 12).join(', ')})` : ''}`);
     }
     L.push('');
@@ -148,6 +164,7 @@ export function buildPrompt({ range, kitchen, low, out, days, recipes, lunch = f
   L.push('Use the exact title for any of our saved recipes.');
   L.push('2. For each meal that isn’t one of our saved recipes, a recipe in this shape:');
   L.push('RECIPE: Title');
+  L.push(`Method: one of ${METHODS.map((m) => m[1].toLowerCase()).join(', ')}`);
   L.push('Ingredients');
   L.push('(one per line, with amounts)');
   L.push('Steps');
