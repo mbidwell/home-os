@@ -15,6 +15,8 @@ This repo is a template: it holds no names, addresses, chores, or calendar data.
 6. **Publish.** GitHub Pages from the `main` branch root. The app is served at `/<repo-name>/`; all paths are relative.
 7. **Install.** On each iPhone, open the site in Safari, tap Share, then Add to Home Screen, and sign in inside the installed app. (An installed app keeps its own storage, separate from Safari.)
 
+8. **Costco list (optional).** In the app, Settings > Lists > Import Costco list, and pick a CSV with columns `name, category, store, good_to_freeze`. Categories Fridge, Freezer, Pantry, Household, and Kids group the list; anything else goes under Other. Keep the CSV out of the repo.
+
 ## Notes
 
 - Theme is stored per phone. Night Shift dims to amber from 10 PM to 6 AM (toggle in Settings).

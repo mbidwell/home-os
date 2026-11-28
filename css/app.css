@@ -55,7 +55,7 @@ svg.i { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-widt
 
 /* ---------- motion ---------- */
 .press { transition: transform .16s cubic-bezier(.2,.8,.2,1), background-color .2s, box-shadow .2s; cursor: pointer; touch-action: manipulation; }
-.press:active { transform: scale(.97); }
+.press:active { transform: translateY(1px) scale(.97); }
 .rise { animation: rise .55s cubic-bezier(.2,.8,.2,1) both; }
 .rise.d1 { animation-delay: .06s; } .rise.d2 { animation-delay: .12s; }
 .still .rise { animation: none; }
@@ -106,7 +106,8 @@ svg.i { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-widt
 .dockwrap { flex: none; position: relative; z-index: 2; padding: 6px 18px max(14px, env(safe-area-inset-bottom)); }
 .dockwrap::before { content: ""; position: absolute; left: 0; right: 0; top: -22px; height: 22px; background: linear-gradient(to bottom, transparent, var(--bg)); pointer-events: none; }
 .dock { height: 70px; border-radius: 26px; background: var(--s1); box-shadow: var(--sh); display: flex; padding: 7px; gap: 7px; }
-.dock a { flex: 1; border-radius: 20px; color: var(--ink2); font: 700 14px var(--f-body); display: flex; align-items: center; justify-content: center; gap: 8px; min-height: 56px; }
+.dock a { flex: 1; min-width: 0; border-radius: 20px; color: var(--ink2); font: 700 12px var(--f-body); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; min-height: 56px; }
+.dock a svg.i { width: 21px; height: 21px; }
 .dock a.on { background: var(--acc); color: var(--on-acc); }
 
 /* ---------- settings ---------- */
@@ -158,3 +159,132 @@ main.si { display: flex; flex-direction: column; padding: calc(env(safe-area-ins
 
 /* ---------- layout debug readout ---------- */
 #dbg { position: fixed; top: calc(env(safe-area-inset-top) + 4px); left: 4px; z-index: 99; margin: 0; padding: 6px 8px; border-radius: 8px; background: rgba(0,0,0,.75); color: #fff; font: 11px/1.35 ui-monospace, monospace; pointer-events: none; }
+
+/* ---------- slice 2: grocery, add-from sheet, kitchen ---------- */
+button { background: none; border: 0; padding: 0; cursor: pointer; }
+.hide { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
+.empty { color: var(--ink2); font-size: 15px; line-height: 1.45; margin: 18px 8px; }
+
+/* quick add: the one hero on Grocery */
+.qa { background: var(--hero); color: var(--hero-ink); border-radius: 26px; padding: 14px; margin-bottom: 14px; box-shadow: var(--sh); }
+.qa .row, .newst .row { display: flex; gap: 10px; }
+.qa .fld { flex: 1; min-width: 0; height: 56px; border-radius: 18px; border: 0; background: color-mix(in srgb, var(--hero-ink) 9%, transparent); padding: 0 16px; font-size: 17px; color: var(--hero-ink); outline: none; }
+.qa .fld::placeholder { color: var(--hero-ink2); opacity: 1; }
+.qa .fld:focus { box-shadow: inset 0 0 0 2px var(--hero-ink2); }
+.add { width: 56px; height: 56px; flex: none; border-radius: 18px; background: var(--acc); color: var(--on-acc); display: grid; place-items: center; }
+.qa .chips { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+.chip { height: 44px; padding: 0 14px; border-radius: 999px; border: 1.5px solid color-mix(in srgb, var(--hero-ink) 22%, transparent); display: inline-flex; align-items: center; gap: 6px; font: 700 14px var(--f-body); color: var(--hero-ink); }
+.chip svg.i { width: 18px; height: 18px; }
+/* Kitchen's add box is quieter: the Out card is the hero there. */
+.qa.slim { background: var(--s1); color: var(--ink); box-shadow: var(--sh-soft); padding: 8px; margin: 14px 0 4px; }
+.qa.slim .fld { background: transparent; color: var(--ink); height: 52px; }
+.qa.slim .fld::placeholder { color: var(--ink2); }
+.qa.slim .fld:focus { box-shadow: inset 0 -2px 0 var(--ink); border-radius: 0; }
+.qa.slim .add { background: var(--s2); color: var(--ink); width: 52px; height: 52px; }
+
+/* lists */
+.sec { display: flex; align-items: center; justify-content: space-between; margin: 16px 6px 8px; min-height: 20px; }
+.sec b { font: 700 13px var(--f-body); color: var(--ink2); }
+.sec span { font: 500 13px var(--f-num); color: var(--ink2); }
+.list { background: var(--s1); border-radius: 24px; box-shadow: var(--sh-soft); padding: 2px 6px 2px 14px; }
+.it { min-height: 56px; display: flex; align-items: center; gap: 12px; }
+.it + .it { border-top: 1px solid var(--line); }
+.it .nm { flex: 1; min-width: 0; font-weight: 600; text-align: left; min-height: 56px; display: flex; flex-direction: column; justify-content: center; align-items: flex-start; padding: 6px 0; overflow-wrap: anywhere; }
+.it .nm small { display: block; font-weight: 500; font-size: 13px; color: var(--ink2); }
+.nmb { font-weight: 600; text-align: left; padding: 4px 0; }
+.cb { width: 44px; height: 44px; margin: 0 -8px; flex: none; display: grid; place-items: center; position: relative; }
+.cb::before { content: ""; width: 28px; height: 28px; border-radius: 9px; border: 2px solid var(--ink2); position: absolute; inset: 0; margin: auto; box-sizing: border-box; }
+.t-cozy .cb::before { border-radius: 50%; }
+.cb.on::before { background: var(--ok); border-color: var(--ok); }
+.cb svg.i { width: 18px; height: 18px; stroke-width: 2.6; color: var(--bg); position: relative; }
+.tag { height: 40px; padding: 0 12px; border-radius: 12px; background: var(--s2); font: 700 13px var(--f-body); color: var(--ink); margin-right: 4px; flex: none; }
+.done .nm { color: var(--ink2); text-decoration: line-through; }
+.clear { height: 36px; padding: 0 12px; border-radius: 12px; border: 1.5px solid var(--line); font: 700 13px var(--f-body); color: var(--ink2); }
+.plus { width: 44px; height: 44px; flex: none; border-radius: 14px; background: var(--s2); display: grid; place-items: center; margin-right: 2px; color: var(--ink); }
+.onlist { font: 600 13px var(--f-body); color: var(--ok); display: inline-flex; align-items: center; gap: 4px; margin-right: 8px; flex: none; }
+.onlist svg.i { width: 16px; height: 16px; stroke-width: 2.4; }
+.nm .onlist { margin: 2px 0 0; }
+
+/* segmented control */
+.seg { display: flex; background: var(--s1); border-radius: 18px; padding: 5px; gap: 5px; }
+.seg > * { flex: 1; min-width: 0; height: 46px; border-radius: 14px; display: grid; place-items: center; font: 700 14px var(--f-body); color: var(--ink2); }
+.seg > .on { background: var(--ink); color: var(--bg); }
+.seg > .soon { opacity: .45; font-size: 11.5px; text-align: center; line-height: 1.1; }
+
+/* Have / Low / Out */
+.hlo { display: flex; background: var(--s2); border-radius: 14px; padding: 3px; gap: 3px; flex: none; }
+.hlo button { width: 50px; height: 44px; border-radius: 11px; font: 700 13px var(--f-body); color: var(--ink2); }
+.hlo .h { background: var(--s1); color: var(--ink); }
+.hlo .l { background: color-mix(in srgb, var(--acc) 30%, var(--s1)); color: var(--ink); }
+.hlo .o { background: var(--ink); color: var(--bg); }
+.send { height: 34px; padding: 0 10px; border-radius: 11px; background: var(--s2); color: var(--ink); font: 700 12.5px var(--f-body); display: inline-flex; align-items: center; gap: 4px; margin-top: 4px; }
+.send svg.i { width: 15px; height: 15px; stroke-width: 2.4; }
+.hero.sum { padding: 18px 20px; border-radius: 26px; }
+.hero.sum h2 { margin: 0 0 6px; }
+.hero.sum p { margin: 0 0 14px; }
+.hero.sum .pri { height: 52px; font-size: 15px; display: flex; align-items: center; justify-content: center; gap: 8px; }
+
+/* bottom sheet (inside #app, so it shares the safe-area handling) */
+.scrim { position: absolute; inset: 0; background: rgba(5,7,12,.5); z-index: 5; animation: fade .2s both; }
+.bs { position: absolute; left: 0; right: 0; bottom: 0; top: calc(env(safe-area-inset-top) + 64px); z-index: 6; background: var(--bg); border-radius: 30px 30px 0 0; padding: 10px 18px max(18px, env(safe-area-inset-bottom)); display: flex; flex-direction: column; box-shadow: 0 -10px 40px rgba(0,0,0,.3); animation: up .26s cubic-bezier(.2,.8,.2,1) both; }
+.bs.short { top: auto; max-height: calc(100% - env(safe-area-inset-top) - 64px); }
+.bs .grab { width: 42px; height: 5px; border-radius: 9px; background: var(--line); margin: 0 auto 14px; flex: none; box-shadow: 0 0 0 14px transparent; }
+.bs h2 { font-size: var(--h2); margin: 0 4px 12px; display: flex; justify-content: space-between; align-items: center; gap: 12px; flex: none; overflow-wrap: anywhere; }
+.bs .seg { flex: none; margin-bottom: 4px; }
+.bs .scroll { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; margin: 0 -18px; padding: 0 18px 12px; }
+.lnk { font: 700 14px var(--f-body); color: var(--ink2); min-height: 44px; padding: 0 4px; flex: none; }
+.opts { padding: 2px 14px; margin-bottom: 14px; }
+.opt { width: 100%; min-height: 56px; display: flex; align-items: center; justify-content: space-between; font-weight: 600; text-align: left; }
+.opt + .opt { border-top: 1px solid var(--line); }
+.opt.on { color: var(--ink); }
+.opt svg.i { color: var(--ok); stroke-width: 2.4; }
+.opt.soon { color: var(--ink2); opacity: .6; }
+.opt.soon small { font-weight: 500; font-size: 13px; }
+.newst { background: var(--s1); border-radius: 22px; padding: 8px; margin: 12px 0 4px; box-shadow: var(--sh-soft); }
+.newst .fld2 { flex: 1; min-width: 0; height: 52px; border: 0; background: transparent; padding: 0 10px; font-size: 16px; color: var(--ink); outline: none; }
+.newst .fld2::placeholder { color: var(--ink2); }
+.newst .add { width: 52px; height: 52px; }
+.picks { display: flex; flex-wrap: wrap; gap: 6px; padding: 6px 4px 4px; }
+.pick { height: 40px; padding: 0 12px; border-radius: 999px; border: 1.5px solid var(--line); font: 700 13px var(--f-body); color: var(--ink2); }
+.pick.on { border-color: var(--ink); color: var(--ink); }
+@keyframes fade { from { opacity: 0; } }
+@keyframes up { from { transform: translateY(40px); opacity: 0; } }
+.still .scrim, .still .bs { animation: none; }
+@media (prefers-reduced-motion: reduce) { .scrim, .bs { animation: none; } }
+
+/* ---------- motion details: press, ripple, jelly, load & success, morph, glow ---------- */
+/* Ripple: a soft wash from the exact tap point (JS adds .rip). */
+.rp { position: relative; overflow: hidden; isolation: isolate; }
+.rip { position: absolute; border-radius: 50%; pointer-events: none; background: currentColor; opacity: .18; transform: scale(0); animation: rip .55s cubic-bezier(.2,.8,.2,1) forwards; z-index: -1; }
+@keyframes rip { to { transform: scale(1); opacity: 0; } }
+/* Press down: raised buttons sink and lose their lift. */
+.pri, .add { transition: transform .16s cubic-bezier(.2,.8,.2,1), box-shadow .16s, width .32s cubic-bezier(.2,.8,.2,1), border-radius .32s, background-color .2s; box-shadow: 0 6px 14px color-mix(in srgb, var(--acc) 28%, transparent); }
+.pri:active, .add:active { box-shadow: 0 1px 3px color-mix(in srgb, var(--acc) 30%, transparent); }
+.qa.slim .add { box-shadow: none; }
+/* Jelly bounce on check and status changes. */
+.jelly { animation: jelly .5s cubic-bezier(.3,.7,.4,1.4) both; }
+@keyframes jelly { 0% { transform: scale(1); } 25% { transform: scale(1.22, .82); } 45% { transform: scale(.88, 1.12); } 65% { transform: scale(1.06, .95); } 100% { transform: scale(1); } }
+.pop { animation: pop .38s cubic-bezier(.3,.7,.4,1.5) both; }
+@keyframes pop { from { transform: scale(.6); opacity: 0; } }
+/* Expand morph: + grows into "+ Add" once there's something to add. */
+.qa .add { width: 56px; gap: 6px; font: 700 15px var(--f-body); white-space: nowrap; display: flex; align-items: center; justify-content: center; }
+.qa .add span { max-width: 0; opacity: 0; overflow: hidden; transition: max-width .32s cubic-bezier(.2,.8,.2,1), opacity .2s; }
+.qa .add.ready { width: 96px; }
+.qa .add.ready span { max-width: 40px; opacity: 1; }
+/* Glow pulse: rings breathe around the ready button. */
+.qa .add.ready { animation: glow 1.8s ease-in-out infinite; }
+@keyframes glow { 0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--acc) 45%, transparent), 0 6px 14px color-mix(in srgb, var(--acc) 28%, transparent); } 50% { box-shadow: 0 0 0 9px color-mix(in srgb, var(--acc) 0%, transparent), 0 6px 14px color-mix(in srgb, var(--acc) 28%, transparent); } }
+/* Load & success: a pill shrinks to a spinner, then becomes a check. */
+.pri.ld { width: 56px; margin-left: auto; margin-right: auto; border-radius: 28px; color: transparent; pointer-events: none; transition: width .32s cubic-bezier(.2,.8,.2,1), border-radius .32s, color .1s; position: relative; }
+.pri.ld svg { opacity: 0; }
+.pri.ld::after { content: ""; position: absolute; inset: 0; margin: auto; width: 22px; height: 22px; border-radius: 50%; border: 2.5px solid var(--on-acc); border-right-color: transparent; animation: spin .7s linear infinite; }
+.pri.ld.ok::after { width: 12px; height: 22px; border: solid var(--on-acc); border-width: 0 3px 3px 0; border-radius: 0; transform: translateY(-3px) rotate(45deg); animation: pop .32s cubic-bezier(.3,.7,.4,1.5) both; }
+@keyframes spin { to { transform: rotate(1turn); } }
+/* Sync dot pops when a save lands. */
+.sync.just i { animation: dotpop .6s cubic-bezier(.3,.7,.4,1.5); }
+@keyframes dotpop { 30% { transform: scale(1.9); box-shadow: 0 0 0 6px color-mix(in srgb, var(--ok) 25%, transparent); } }
+@media (prefers-reduced-motion: reduce) {
+  .rip, .jelly, .pop, .qa .add.ready, .sync.just i, .pri.ld.ok::after { animation: none; }
+  .pri.ld::after { animation-duration: 1.6s; }
+  .pri, .add, .qa .add span { transition: none; }
+}

@@ -81,6 +81,9 @@ async function token() {
   return session.access_token;
 }
 
+export const accessToken = token;
+export const realtimeUrl = () => `${BASE.replace(/^http/, 'ws')}/realtime/v1/websocket?apikey=${encodeURIComponent(KEY)}&vsn=1.0.0`;
+
 export async function rest(path, { method = 'GET', body, prefer } = {}) {
   const send = async () => {
     const h = { apikey: KEY, Authorization: `Bearer ${await token()}` };
