@@ -8,8 +8,9 @@ import * as F from './fit.js';
 import * as C from './cheer.js';
 import * as A from './aisles.js';
 import * as R from './routines.js';
+import { parseStock } from './stock.js';
 
-const VERSION = '27';
+const VERSION = '30';
 const T = window.homeosTheme;
 const Q = new URLSearchParams(location.search);
 const PREVIEW = T.isPreview ? Q.get('preview') : null; // local screenshots only
@@ -171,6 +172,8 @@ if (PREVIEW) {
   else if (Q.get('msheet')) ui.sheet = Q.get('msheet') === 'recipe' ? { type: 'recipe', id: 'r1' } : Q.get('msheet') === 'meal' ? { type: 'meal', slot: M.slotOf(S.addDays(today, 1)) } : { type: Q.get('msheet') };
   state.rows.routines = [{ id: 'w1', title: 'Music class', who: 'kids', weekdays: [1, 3, 5], start_time: '09:00', end_time: '13:00', breaks: [] }, { id: 'w2', title: 'Study group', who: 'p', weekdays: [3], start_time: '09:00', end_time: '12:00', breaks: [{ from: S.addDays(today, 20), to: S.addDays(today, 40), label: 'Winter break' }] }];
   if (Q.get('msheet') === 'routine') ui.sheet = { type: 'routine', id: 'w2' };
+  if (Q.get('msheet') === 'sayall') { ui.sayText = 'Fridge: milk, eggs, shredded cheese is low. Freezer: chicken thighs and frozen peas. Pantry: rice, we\'re out of olive oil.'; ui.sheet = { type: 'sayall' }; }
+  if (Q.get('msheet') === 'sayreview') { ui.say = parseStock('Fridge: milk, eggs, shredded cheese is low. Freezer: chicken thighs and frozen peas. Pantry: rice, we\'re out of olive oil.', 'fridge').map((x) => ({ ...x, on: true, existing: state.rows.pantry_items.find((q) => q.name.toLowerCase() === x.name.toLowerCase())?.id || null })); ui.sheet = { type: 'sayreview' }; }
   state.rows.pantry_items.push({ id: 'lo1', name: 'Leftover chili', location: 'fridge', status: 'have', made_on: S.addDays(today, -3) });
   state.rows.cheers = [{ id: 'n1', to_user: 'me', created_by: 'p', text: 'I love you. Thank you for everything you do.', created_at: now }, { id: 'n2', to_user: 'p', created_by: 'me', text: 'You make this house a home.', created_at: now }];
   if (Q.get('cheer')) setTimeout(() => cheer(Q.get('cheer'), true), 600);
@@ -196,6 +199,7 @@ const I = {
   sun: '<circle cx="12" cy="12" r="4"/><path d="M12 2.8v2M12 19.2v2M2.8 12h2M19.2 12h2M5.5 5.5l1.4 1.4M17.1 17.1l1.4 1.4M5.5 18.5l1.4-1.4M17.1 6.9l1.4-1.4"/>',
   chev: '<path d="M9 5.5 15.5 12 9 18.5"/>',
   back: '<path d="M15 5.5 8.5 12 15 18.5"/>',
+  mic: '<rect x="9" y="3.5" width="6" height="11" rx="3"/><path d="M5.5 11.5a6.5 6.5 0 0 0 13 0M12 18v2.5"/>',
   arr: '<path d="M5 12h14M13 6l6 6-6 6"/>',
   check: '<path d="M5 12.5 10 17.5 19 7"/>',
   cart: '<path d="M3 4.5h2.4l2.1 10.2h10.4l2-7.4H6.6"/><circle cx="9.5" cy="19" r="1.4"/><circle cx="16.5" cy="19" r="1.4"/>',
@@ -653,7 +657,7 @@ function stockView() {
     <form class="qa slim rise" data-form="padd" autocomplete="off"><div class="row">
       <input class="fld" name="name" type="text" placeholder="Add to ${locName(loc).toLowerCase()}" maxlength="80" enterkeyhint="done" aria-label="Add to ${locName(loc).toLowerCase()}">
       <button class="add press" type="submit" aria-label="Add">${ic('plus')}</button></div>
-      ${loc === 'fridge' ? `<div class="chips"><button type="button" class="chip press" data-act="leftover">${ic('plus')}Leftovers</button></div>` : ''}</form>
+      <div class="chips"><button type="button" class="chip press" data-act="sayall">${ic('mic')}Say it all</button>${loc === 'fridge' ? `<button type="button" class="chip press" data-act="leftover">${ic('plus')}Leftovers</button>` : ''}</div></form>
     ${!here.length ? `<p class="empty">Nothing in the ${locName(loc).toLowerCase()} yet. Add what you keep here, then mark it Low or Out when it runs down.</p>` : ''}
     ${block('out', 'Out')}${block('low', 'Low')}${block('have', 'Have')}
   </main>
@@ -1387,24 +1391,59 @@ function tlHtml(date, withNapBtn) {
   return `${allDay.length ? `<div class="alld">${allDay.map((e) => `<span>${esc(e.title || 'Busy')}</span>`).join('')}</div>` : ''}<div class="tl rise d1">${items.map(row).join('')}</div>`;
 }
 
+// Today's shift card, and the next six days beside it: swipe sideways for the week.
+function daySub(d, st) {
+  return st.type === 'union' ? `Union EMS office${st.was === 'on_call' ? ' · on call too' : st.was === 'post_call' ? ' · post call that morning' : ''}`
+    : st.type === 'working' ? esc(st.site || '') : st.type === 'on_call' ? 'Not working unless called in' : st.type === 'post_call' ? 'Rest after the overnight'
+    : st.type === 'not_posted' ? 'Nothing posted yet' : st.type === 'unknown' ? 'Can’t tell until the calendar updates' : st.type === 'no_shift' ? 'Day off' : '';
+}
+// On the other phone: a day card about their day (dinner, their routines, appointments they're taking), swipeable like the shift card.
+function myDayHero(today) {
+  const card = (d, i) => {
+    const m = mealOf(M.slotOf(d)), r = m && m.recipe_id ? findRow('recipes', m.recipe_id) : null;
+    const items = [
+      ...routinesOn(d).filter((x) => x.who === myId() || x.who === 'kids' || x.who === 'family' || !x.who).map((x) => ({ k: hm(x.start_time), t: `${span(x.start_time, x.end_time)} · ${x.title}` })),
+      ...apptsOn(d).filter((a) => { const tk = takerOf(a); return !tk || tk === myId() || tk === 'both'; }).map((a) => ({ k: hhmmOf(a.starts_at), t: `${timeOf(a.starts_at)} · ${a.title}` }))
+    ].sort((a, b) => a.k.localeCompare(b.k));
+    const when = i === 0 ? 'Your day' : i === 1 ? 'Tomorrow' : shortDay(d, { weekday: 'long', month: 'short', day: 'numeric' });
+    return `<a class="hero shift press dcard" href="#/kitchen" data-ktab="meals" aria-label="${esc(when)}">
+      <p class="eyebrow">${when}</p>
+      <div class="row2"><h2>${m ? esc(mealTitle(m)) : 'Dinner not planned'}</h2><span class="big">${m ? clock(daySet().dinner) : ''}</span></div>
+      <p>${m ? `Dinner${r && r.method ? ` · ${esc(M.methodLabel(r.method))}` : ''}` : 'Tap to plan it'}</p>
+      ${items.length ? `<ul class="dlist">${items.slice(0, 3).map((x) => `<li>${esc(x.t)}</li>`).join('')}${items.length > 3 ? `<li>+${items.length - 3} more</li>` : ''}</ul>` : `<p class="pcl">Nothing else on the calendar</p>`}
+    </a>`;
+  };
+  const days = [0, 1, 2, 3, 4, 5, 6].map((i) => S.addDays(today, i));
+  return `<div class="dayswipe-wrap rise" style="margin:0 0 22px"><div class="dayswipe" aria-label="Your week, swipe for more days">${days.map(card).join('')}</div>
+    <div class="ddots" aria-hidden="true">${days.map((_, i) => `<i class="${i ? '' : 'on'}"></i>`).join('')}</div></div>`;
+}
+
 function shiftHero(today, readOnly = false) {
   const cs = calSync();
   if (!cs.setup) return `<a class="card press rise" href="#/settings"><div class="ic">${ic('cal')}</div><div><b>Calendar</b><small>Not connected yet. Your shifts will show here.</small></div></a>`;
-  const st = statusOf(today), tom = statusOf(S.addDays(today, 1));
+  const st = statusOf(today);
   const asOf = !cs.ok && cs.lastOk ? ` · as of ${timeOf(cs.lastOk)}` : '';
-  const pc = st.postCall && st.type !== 'post_call' ? `<p class="pcl">Post call until ${timeOf(st.postCall.until)}</p>` : '';
   const actBtn = st.type === 'on_call' || st.was === 'on_call' ? `<button class="actb press" data-act="actopen" data-date="${today}">I got activated</button>`
     : st.type === 'activated' ? `<button class="actb press" data-act="actopen" data-date="${today}">Edit activation</button>` : '';
   const unionBtn = unionOn(today) && canUnion(today) ? `<button class="actb press" data-act="union" data-date="${today}">Not a union day</button>`
     : canUnion(today) ? `<button class="actb press" data-act="union" data-date="${today}">Union day</button>` : '';
   const act = readOnly ? '' : [actBtn, unionBtn].filter(Boolean).join('');
-  const sub = st.type === 'union' ? `Union EMS office${st.was === 'on_call' ? ' · on call too' : st.was === 'post_call' ? ' · post call this morning' : ''}` : st.type === 'working' ? esc(st.site || '') : st.type === 'on_call' ? 'Not working unless called in' : st.type === 'post_call' ? 'Rest after the overnight' : st.type === 'not_posted' ? 'Nothing posted for today yet' : st.type === 'unknown' ? 'Can’t tell until the calendar updates' : '';
-  return `<div class="stack rise" style="margin:0 0 26px"><a class="hero shift press${st.type === 'unknown' ? ' unknown' : ''}" href="#/calendar">
-    <p class="eyebrow">${readOnly ? `${esc(ownerName())}’s day` : 'Your day'}${asOf}</p>
-    <div class="row2"><h2>${esc(st.label)}</h2><span class="big">${esc(st.hoursLong || (st.type === 'post_call' ? st.hours : '') || '')}</span></div>
-    ${sub ? `<p>${sub}</p>` : ''}${!readOnly && apptsOn(today).some(quietForMe) ? `<p class="pcl">While you’re at work: ${apptsOn(today).filter(quietForMe).map((a) => `${esc(a.title)} ${timeOf(a.starts_at)}`).join(', ')}</p>` : ''}${st.union ? `<p class="pcl">Union office ${unionHours()}</p>` : ''}${pc}
-    <div class="tom"><span>Tomorrow</span><b>${esc(chipTextU(tom))}</b></div>
-  </a>${act ? `<div class="actrow${actBtn && unionBtn ? ' two2' : ''}">${act}</div>` : ''}</div>`;
+  const card = (d, i) => {
+    const s2 = i ? statusOf(d) : st;
+    const pc = s2.postCall && s2.type !== 'post_call' ? `<p class="pcl">Post call until ${timeOf(s2.postCall.until)}</p>` : '';
+    const quiet = !readOnly && apptsOn(d).some(quietForMe) ? `<p class="pcl">While you’re at work: ${apptsOn(d).filter(quietForMe).map((a) => `${esc(a.title)} ${timeOf(a.starts_at)}`).join(', ')}</p>` : '';
+    const when = i === 0 ? `${readOnly ? `${esc(ownerName())}’s day` : 'Your day'}${asOf}` : i === 1 ? 'Tomorrow' : shortDay(d, { weekday: 'long', month: 'short', day: 'numeric' });
+    const sub = daySub(d, s2);
+    return `<a class="hero shift press dcard${s2.type === 'unknown' ? ' unknown' : ''}" href="#/calendar" aria-label="${esc(when)}: ${esc(s2.label)}">
+      <p class="eyebrow">${when}</p>
+      <div class="row2"><h2>${esc(s2.label)}</h2><span class="big">${esc(s2.hoursLong || (s2.type === 'post_call' ? s2.hours : '') || '')}</span></div>
+      ${sub ? `<p>${sub}</p>` : ''}${quiet}${s2.union ? `<p class="pcl">Union office ${unionHours()}</p>` : ''}${pc}
+    </a>`;
+  };
+  const days = [0, 1, 2, 3, 4, 5, 6].map((i) => S.addDays(today, i));
+  return `<div class="dayswipe-wrap rise" style="margin:0 0 22px"><div class="dayswipe" aria-label="Your week, swipe for more days">${days.map(card).join('')}</div>
+    <div class="ddots" aria-hidden="true">${days.map((_, i) => `<i class="${i ? '' : 'on'}"></i>`).join('')}</div>
+    ${act ? `<div class="actrow${actBtn && unionBtn ? ' two2' : ''}">${act}</div>` : ''}</div>`;
 }
 
 function syncWarn() {
@@ -1484,9 +1523,11 @@ function todoHtml(td) {
   const { mine, myTasks, theirs, doneToday } = todoToday(td);
   const n = mine.length + myTasks.length;
   const pn = partnerId() ? userName(partnerId()) : 'your partner';
-  const foot = [doneToday && `${plural(doneToday, 'thing')} done today`, theirs && `${theirs} more for ${pn}`].filter(Boolean).join(' · ');
+  const foot = theirs ? `${theirs} more for ${pn}` : ''; // the progress bar already shows what's done
   if (!n) return `${sec('To do today')}${doneToday ? `<div class="card alldone rise d1"><div class="ic">${ic('star')}</div><div><b>All done for today</b><small>${plural(doneToday, 'thing')} checked off. Go put your feet up.</small></div></div>` : `<div class="list todo rise d1"><p class="empty" style="margin:16px 4px">Nothing due today.</p></div>`}${theirs ? `<p class="upd">${theirs} more for ${esc(pn)}</p>` : ''}`;
-  return `${sec('To do today', n)}<div class="list todo rise d1">${mine.map((c) => choreRow(c, td)).join('')}${myTasks.map((t) => taskRowToday(t, td)).join('')}</div>${foot ? `<p class="upd">${esc(foot)}</p>` : ''}`;
+  const tot = n + doneToday, pct = tot ? Math.round((doneToday / tot) * 100) : 0;
+  const prog = doneToday ? `<div class="todo-prog rise" role="img" aria-label="${doneToday} of ${tot} done today"><div class="trk"><b style="width:${pct}%"></b></div><span>${doneToday} of ${tot} done</span></div>` : '';
+  return `${sec('To do today', n)}${prog}<div class="list todo rise d1">${mine.map((c) => choreRow(c, td)).join('')}${myTasks.map((t) => taskRowToday(t, td)).join('')}</div>${foot ? `<p class="upd">${esc(foot)}</p>` : ''}`;
 }
 
 // After 7 PM: tomorrow at a glance, so the next day gets planned the night before.
@@ -1573,7 +1614,7 @@ function homeView() {
   <main>
     ${syncWarn()}
     ${setup}
-    ${mine() ? shiftHero(td) : ''}
+    ${mine() ? shiftHero(td) : myDayHero(td)}
     ${todoHtml(td)}
     ${tomorrowHtml(td)}
     ${headsUp(td)}
@@ -1790,10 +1831,12 @@ function sheetView() {
   else if (s.type === 'paste') body = pasteSheet();
   else if (s.type === 'planpaste') body = planPasteSheet();
   else if (s.type === 'routine') body = routineSheet(findRow('routines', s.id));
+  else if (s.type === 'sayall') body = sayAllSheet();
+  else if (s.type === 'sayreview') body = sayReviewSheet();
   else if (s.type === 'plan') body = planSheet();
   else if (s.type === 'addcal') { const k = findRow('kid_items', s.id); body = k && k.starts_at ? `<h2>${esc(k.title)}</h2><div class="list opts"><a class="opt press" target="_blank" rel="noopener" href="${gcalLink(k)}">Google Calendar${ic('chev')}</a><button class="opt press" data-act="ics" data-id="${k.id}">Apple Calendar, with a 1 hour alert${ic('chev')}</button></div><p class="hint">To skip this step, pick your calendar in Settings.</p>` : ''; }
   if (!body) { ui.sheet = null; return ''; }
-  return `<div class="scrim" data-act="close"></div><div class="bs${['addfrom', 'chore', 'meal', 'recipe', 'ingr', 'ai', 'paste', 'planpaste', 'plan', 'routine'].includes(s.type) ? '' : ' short'}" role="dialog" aria-modal="true">
+  return `<div class="scrim" data-act="close"></div><div class="bs${['addfrom', 'chore', 'meal', 'recipe', 'ingr', 'ai', 'paste', 'planpaste', 'plan', 'routine', 'sayall', 'sayreview'].includes(s.type) ? '' : ' short'}" role="dialog" aria-modal="true">
     <div class="grab" data-act="close"></div>${body}</div>`;
 }
 
@@ -1831,6 +1874,26 @@ function groceryItemSheet(g) {
     <p class="gt">Store</p>
     <div class="list opts">${STORES.map(([k, l]) => opt(k, l)).join('')}${opt(null, 'No store yet')}</div>
     <button class="ghost press" data-act="gdel" data-id="${g.id}">Remove from list</button>`;
+}
+
+/* "Say it all": dictate the whole kitchen, review, then save. */
+function sayAllSheet() {
+  return `<h2>Say it all<button class="lnk" data-act="close">Cancel</button></h2>
+    <p class="hint" style="margin-top:0">Tap the 🎤 on your keyboard and talk through the house. Name each place, and say “low” or “out of” where it fits.</p>
+    <p class="hint say-ex">“Fridge: milk, eggs, cheese is low. Freezer: chicken thighs, frozen peas. Pantry: rice, we’re out of olive oil.”</p>
+    <div class="scroll"><textarea class="ta" id="saybox" rows="9" placeholder="Fridge: …" autocapitalize="sentences">${esc(ui.sayText || '')}</textarea></div>
+    <div class="foot2"><button class="pri press" data-act="sayread">${ic('arr')}Review</button></div>`;
+}
+function sayReviewSheet() {
+  const xs = ui.say || [];
+  if (!xs.length) return '';
+  const n = xs.filter((x) => x.on).length;
+  const row = (x, i) => `<div class="it ing" data-act="saytog" data-i="${i}" role="checkbox" aria-checked="${x.on}"><span class="cb${x.on ? ' on' : ''}">${x.on ? ic('check') : ''}</span><span class="nm">${esc(x.name)}<small>${esc(locName(x.location))}${x.status !== 'have' ? ` · ${x.status === 'low' ? 'Low' : 'Out'}` : ''}${x.existing ? ' · updates what’s there' : ''}</small></span></div>`;
+  const places = LOCS.map(([k, l]) => [l, xs.map((x, i) => [x, i]).filter(([x]) => x.location === k)]).filter(([, g]) => g.length);
+  return `<h2>Check the list<button class="lnk" data-act="sayback">Edit</button></h2>
+    <p class="hint" style="margin-top:0">Uncheck anything it heard wrong. You can fix places and amounts in the Kitchen after.</p>
+    <div class="scroll">${places.map(([l, g]) => `${sec(esc(l), g.length)}<div class="list">${g.map(([x, i]) => row(x, i)).join('')}</div>`).join('')}</div>
+    <div class="foot2"><button class="pri press" data-act="saysave"${n ? '' : ' disabled'}>${ic('check')}${n ? `Save ${plural(n, 'item')}` : 'Nothing checked'}</button></div>`;
 }
 
 function pantryItemSheet(p) {
@@ -2030,6 +2093,11 @@ function render({ soft = false, keepFocus = null, fx = null } = {}) {
   // One-shot motion on whatever just changed (jelly on a check, pop on a new row).
   if (fx) for (const [sel, cls] of fx) { const el = sel && $app.querySelector(sel); if (el) el.classList.add(cls); }
   if (r === 'signin') destroyFx = startParticles($app.querySelector('canvas.fx'));
+  const sw = $app.querySelector('.dayswipe');
+  if (sw) sw.addEventListener('scroll', () => {
+    const i = Math.round(sw.scrollLeft / (sw.firstElementChild?.offsetWidth + 10 || 1));
+    sw.parentElement.querySelectorAll('.ddots i').forEach((d, j) => d.classList.toggle('on', j === i));
+  }, { passive: true });
   debugReadout();
 }
 
@@ -2128,6 +2196,7 @@ $app.addEventListener('submit', async (e) => {
 $app.addEventListener('click', (e) => {
   // In-app links swap the screen without stacking history, so a back-swipe doesn't jump between tabs.
   const link = e.target.closest('a[href^="#/"]');
+  if (link && link.dataset.ktab) { ui.ktab = link.dataset.ktab; ls.set(K.ktab, ui.ktab); ui.week = 0; }
   if (link) { e.preventDefault(); if (location.hash !== link.getAttribute('href')) location.replace(link.getAttribute('href')); return; }
   const t = e.target.closest('[data-theme],[data-act]');
   if (!t || t.tagName === 'INPUT') return;
@@ -2364,6 +2433,28 @@ $app.addEventListener('click', (e) => {
       return soft();
     }
     case 'lodone': { const p = { ...findRow('pantry_items', id) }; removeRow('pantry_items', id); offerUndo(t.dataset.v === 'ate' ? `Ate the ${p.name.toLowerCase()}` : `Tossed the ${p.name.toLowerCase()}`, () => restoreRow('pantry_items', p)); return soft(); }
+    case 'sayall': ui.sheet = { type: 'sayall' }; render({ soft: true, keepFocus: '#saybox' }); return;
+    case 'sayread': {
+      const box = $app.querySelector('#saybox'), text = box ? box.value : '';
+      ui.sayText = text;
+      const xs = parseStock(text, ui.loc);
+      if (!xs.length) { box?.focus(); return; }
+      ui.say = xs.map((x) => { const p = pantry().find((q) => norm(q.name) === norm(x.name)); return { ...x, on: true, existing: p ? p.id : null }; });
+      ui.sheet = { type: 'sayreview' }; return soft();
+    }
+    case 'sayback': ui.sheet = { type: 'sayall' }; return soft();
+    case 'saytog': { const x = ui.say?.[+t.dataset.i]; if (x) x.on = !x.on; return soft([[`[data-act="saytog"][data-i="${t.dataset.i}"] .cb`, 'jelly']]); }
+    case 'saysave': {
+      if (t.disabled || t.classList.contains('ld')) return;
+      const xs = (ui.say || []).filter((x) => x.on), made = [], before = [];
+      for (const x of xs) {
+        if (x.existing) { const p = findRow('pantry_items', x.existing); if (p) { before.push({ id: p.id, status: p.status, location: p.location }); updateRow('pantry_items', p.id, { status: x.status, location: x.location }); } }
+        else made.push(insertRow('pantry_items', { name: x.name, location: x.location, status: x.status }));
+      }
+      offerUndo(`Saved ${plural(xs.length, 'item')}`, () => { made.forEach((r) => removeRow('pantry_items', r.id)); before.forEach((b) => updateRow('pantry_items', b.id, { status: b.status, location: b.location })); });
+      ui.say = null; ui.sayText = ''; ui.sheet = null;
+      return soft();
+    }
     case 'leftover': {
       const f = $app.querySelector('[data-form="padd"]'), typed = f ? f.name.value.trim() : '';
       const td = todayStr(), m = mealOf(M.slotOf(td)) || mealOf(M.slotOf(S.addDays(td, -1)));
