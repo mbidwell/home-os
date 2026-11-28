@@ -35,7 +35,8 @@ const STORES = [['costco', 'Costco'], ['wegmans', 'Wegmans'], ['publix', 'Publix
 const storeName = (k) => (STORES.find((s) => s[0] === k) || [null, 'Unsorted'])[1];
 const LOCS = [['fridge', 'Fridge'], ['freezer', 'Freezer'], ['pantry', 'Pantry'], ['garage_freezer', 'Garage freezer']];
 const locName = (k) => (LOCS.find((l) => l[0] === k) || [null, k])[1];
-const LOC_SOON = 'garage_freezer'; // shown, not usable yet
+const LOC_SOON = null; // a location that's shown but not usable yet (none right now)
+const LOC_SHORT = { garage_freezer: 'Garage' }; // fits the tab bar
 const COSTCO_GROUPS = ['Fridge', 'Freezer', 'Pantry', 'Household', 'Kids', 'Other'];
 
 /* ---------- local preview (screenshots only, sample data, no network) ---------- */
@@ -456,7 +457,7 @@ function kitchenView() {
   const need = outNotListed();
   const seg = LOCS.map(([k, label]) => k === LOC_SOON
     ? `<span class="soon" aria-disabled="true">Garage<br>soon</span>`
-    : `<button class="${k === loc ? 'on' : ''}" data-act="loc" data-loc="${k}" aria-pressed="${k === loc}">${label}</button>`).join('');
+    : `<button class="${k === loc ? 'on' : ''}" data-act="loc" data-loc="${k}" aria-pressed="${k === loc}" aria-label="${label}">${LOC_SHORT[k] || label}</button>`).join('');
   const hero = need.length ? `<div class="stack rise" style="margin:14px 0 26px"><section class="hero sum">
       <p class="eyebrow">Out</p>
       <h2>${esc(need[0].name)}${need.length > 1 ? ` and ${plural(need.length - 1, 'more', 'more')}` : ''}</h2>
