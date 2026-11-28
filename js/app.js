@@ -5,12 +5,12 @@ import * as S from './schedule.js';
 import * as D from './day.js';
 import * as M from './meals.js';
 
-const VERSION = '15';
+const VERSION = '17';
 const T = window.homeosTheme;
 const Q = new URLSearchParams(location.search);
 const PREVIEW = T.isPreview ? Q.get('preview') : null; // local screenshots only
 const $app = document.getElementById('app');
-const K = { profiles: 'homeos-profiles', queue: 'homeos-queue', rows: 'homeos-rows', loc: 'homeos-kitchen-loc', later: 'homeos-partner-later', stores: 'homeos-store-memory', choreTab: 'homeos-chore-tab', lists: 'homeos-task-lists', who: 'homeos-chore-who', debug: 'homeos-debug', ktab: 'homeos-kitchen-tab' };
+const K = { profiles: 'homeos-profiles', queue: 'homeos-queue', rows: 'homeos-rows', loc: 'homeos-kitchen-loc', later: 'homeos-partner-later', stores: 'homeos-store-memory', choreTab: 'homeos-chore-tab', lists: 'homeos-task-lists', who: 'homeos-chore-who', debug: 'homeos-debug', ktab: 'homeos-kitchen-tab', calapp: 'homeos-cal-app' };
 const TABLES = ['grocery_items', 'staples', 'pantry_items', 'tasks', 'task_events',
   'calendar_events', 'calendar_sync', 'day_settings', 'day_overrides', 'kid_items', 'recipes', 'meal_plan'];
 // Tables keyed by something other than id.
@@ -131,7 +131,7 @@ if (PREVIEW) {
   state.rows.day_settings = [{ id: 1, nap_start: '13:00', nap_end: '16:00', nap_minutes: 120, dinner: '18:00', bed: '20:00', post_call_hours: 10, appliances: ['stove', 'oven', 'microwave', 'air_fryer', 'pressure_cooker', 'slow_cooker'] }];
   if (Q.get('nap')) state.rows.day_overrides = [{ date: today, nap_start: Q.get('nap'), nap_end: (() => { const [h, m] = Q.get('nap').split(':').map(Number); return `${String(h + 2).padStart(2, '0')}:${String(m).padStart(2, '0')}`; })() }];
   state.rows.kid_items = [
-    { id: 'k1', kind: 'appointment', title: 'Pediatrician', starts_at: at(0, 16, 30) },
+    { id: 'k1', kind: 'appointment', title: 'Pediatrician', starts_at: at(0, 16, 30), location: '100 Sample Street, Springfield' },
     { id: 'k7', kind: 'appointment', title: 'Swim lesson', starts_at: at(2, 20) },
     { id: 'k2', kind: 'appointment', title: 'Dentist checkup', starts_at: at(12, 10) },
     { id: 'k3', kind: 'supply', title: 'Diapers', status: 'low' }, { id: 'k4', kind: 'supply', title: 'Wipes', status: 'have' },
@@ -163,6 +163,7 @@ if (PREVIEW) {
   }
   if (Q.get('msheet') === 'ingrsoon') { ui.ingrDays = [0, 1, 2].map((i) => S.addDays(today, i)); ui.sheet = { type: 'ingr' }; }
   else if (Q.get('msheet') === 'kid') ui.sheet = { type: 'kid', id: 'k1' };
+  else if (Q.get('msheet') === 'addcal') ui.sheet = { type: 'addcal', id: 'k1' };
   else if (Q.get('msheet')) ui.sheet = Q.get('msheet') === 'recipe' ? { type: 'recipe', id: 'r1' } : Q.get('msheet') === 'meal' ? { type: 'meal', slot: M.slotOf(S.addDays(today, 1)) } : { type: Q.get('msheet') };
   if (Q.get('union')) state.rows.day_overrides.push({ date: today, union_day: true });
   if (Q.get('owner')) state.rows.day_settings[0].calendar_owner = Q.get('owner'); // 'me' or 'p' (see it as the partner)
@@ -1405,7 +1406,7 @@ function kidsView() {
   const upcoming = appts.filter((a) => !a.starts_at || Date.parse(a.starts_at) > Date.now() - 2 * 3600000);
   const supplies = kidsAll().filter((k) => k.kind === 'supply').sort((a, b) => a.title.localeCompare(b.title));
   const today = todayStr();
-  const apptRow = (a) => `<div class="it appt${quietForMe(a) ? ' qt' : ''}"><button class="nm" data-act="kitem" data-id="${a.id}">${esc(a.title)}<span class="when">${a.starts_at ? `${S.dueLabel(D.localDateOf(Date.parse(a.starts_at), TZ), today)} · ${timeOf(a.starts_at)}` : 'No time set'}${takerLine(a) ? ` · ${esc(takerLine(a))}` : ''}${quietForMe(a) ? ' · you’re at work' : ''}</span></button>${a.starts_at && !quietForMe(a) ? `<button class="cal press" data-act="addcal" data-id="${a.id}">${ic('cal')}Add</button>` : ''}</div>`;
+  const apptRow = (a) => `<div class="it appt${quietForMe(a) ? ' qt' : ''}"><button class="nm" data-act="kitem" data-id="${a.id}">${esc(a.title)}<span class="when">${a.starts_at ? `${S.dueLabel(D.localDateOf(Date.parse(a.starts_at), TZ), today)} · ${timeOf(a.starts_at)}` : 'No time set'}${takerLine(a) ? ` · ${esc(takerLine(a))}` : ''}${quietForMe(a) ? ' · you’re at work' : ''}</span>${a.location ? `<span class="when">${esc(a.location)}</span>` : ''}</button>${a.starts_at && !quietForMe(a) ? addBtn(a) : ''}</div>`;
   const hloK = (k) => { const b = (s2, label) => `<button class="${k.status === s2 ? s2[0] : ''}" data-act="kstat" data-id="${k.id}" data-s="${s2}" aria-pressed="${k.status === s2}">${label}</button>`; return `<span class="hlo">${b('have', 'Have')}${b('low', 'Low')}${b('out', 'Out')}</span>`; };
   const supRow = (k) => {
     const sub = k.status === 'out' || k.status === 'low' ? (onGrocery(k.title) ? `<span class="onlist">${ic('check')}On grocery</span>` : `<span class="send press" data-act="ksend" data-id="${k.id}" role="button">${ic('plus')}Grocery</span>`) : '';
@@ -1431,23 +1432,41 @@ function kidSheet(k) {
   const local = k.starts_at ? `${D.localDateOf(Date.parse(k.starts_at), TZ)}T${hhmmOf(k.starts_at)}` : '';
   return `<h2><input class="ttl" data-kf="title" data-id="${k.id}" value="${esc(k.title)}" maxlength="120" aria-label="Name" enterkeyhint="done"><button class="lnk" data-act="close">Done</button></h2>
     <div class="list frm">${k.kind === 'appointment' ? `<label class="frow">When<input type="datetime-local" class="dt" data-kf="starts_at" data-id="${k.id}" value="${local}"></label>
+      <label class="frow">Address<input class="txt" data-kf="location" data-id="${k.id}" value="${esc(k.location || '')}" placeholder="Optional" maxlength="200" autocomplete="street-address"></label>
       <div class="frow">Who’s taking it<span class="seg sm">${[...state.members.map((id) => [id, id === myId() ? (myName() || 'Me') : userName(id)]), ['both', 'Both']].map(([v, l]) => `<button class="${takerOf(k) === v ? 'on' : ''}" data-act="ktaker" data-id="${k.id}" data-v="${v}" aria-pressed="${takerOf(k) === v}">${esc(l)}</button>`).join('')}</span></div>` : ''}</div>
+    ${k.kind === 'appointment' && k.location ? `<a class="src press" href="${mapsLink(k.location)}" target="_blank" rel="noopener">${ic('arr')}Directions in ${calApp() === 'apple' ? 'Apple' : 'Google'} Maps</a>` : ''}
     ${k.kind === 'appointment' && atWork(k) ? `<p class="hint">${calOwner() === myId() ? 'You’re working then' : `${esc(ownerName())}’s working then`}${k.taker ? '' : `, so ${esc(userName(otherParent()) || 'the other parent')} is set to take it`}.</p>` : ''}
     ${sec('Notes')}<textarea class="ta" data-kf="notes" data-id="${k.id}" rows="3" placeholder="Optional">${esc(k.notes || '')}</textarea>
-    ${k.kind === 'appointment' && k.starts_at && !quietForMe(k) ? `<div class="acts2" style="margin-top:12px"><a class="pri press" target="_blank" rel="noopener" href="${gcalLink(k)}">${ic('cal')}Google Calendar</a><button class="ghost press" data-act="ics" data-id="${k.id}">Phone calendar</button></div>` : ''}
+    ${k.kind === 'appointment' && k.starts_at && !quietForMe(k) ? `<div class="acts2" style="margin-top:12px">${calButtons(k)}</div>` : ''}
     <button class="ghost press" data-act="kdel" data-id="${k.id}" style="margin-top:12px">Delete</button>`;
 }
 
+// Which calendar "Add" opens on this phone: 'google', 'apple', or null (ask each time). Per phone.
+const calApp = () => (PREVIEW ? Q.get('calapp') || null : ls.get(K.calapp, null));
+function addBtn(k) {
+  if (calApp() === 'google') return `<a class="cal press" target="_blank" rel="noopener" href="${gcalLink(k)}">${ic('cal')}Add</a>`;
+  if (calApp() === 'apple') return `<button class="cal press" data-act="ics" data-id="${k.id}">${ic('cal')}Add</button>`;
+  return `<button class="cal press" data-act="addcal" data-id="${k.id}">${ic('cal')}Add</button>`;
+}
+function calButtons(k) {
+  const g = (cls) => `<a class="${cls} press" target="_blank" rel="noopener" href="${gcalLink(k)}">${ic('cal')}Google Calendar</a>`;
+  const a = (cls) => `<button class="${cls} press" data-act="ics" data-id="${k.id}">${ic('cal')}Apple Calendar</button>`;
+  return calApp() === 'apple' ? a('pri') + g('ghost') : g('pri') + a('ghost');
+}
 const icsStamp = (iso) => new Date(iso).toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '');
 function gcalLink(k) {
   const end = new Date(Date.parse(k.starts_at) + 3600000).toISOString();
-  return `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent(k.title)}&dates=${icsStamp(k.starts_at)}/${icsStamp(end)}`;
+  return `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent(k.title)}&dates=${icsStamp(k.starts_at)}/${icsStamp(end)}${k.location ? `&location=${encodeURIComponent(k.location)}` : ''}`;
+}
+// Directions in the maps app that matches this phone's calendar choice.
+function mapsLink(addr) {
+  return calApp() === 'apple' ? `https://maps.apple.com/?q=${encodeURIComponent(addr)}` : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(addr)}`;
 }
 function downloadIcs(k) {
   const end = new Date(Date.parse(k.starts_at) + 3600000).toISOString();
   const icsEsc = (t) => String(t).replace(/[\\,;]/g, (c) => `\\${c}`).replace(/\n/g, '\\n');
   const body = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Home//EN', 'BEGIN:VEVENT', `UID:${k.id}@home`, `DTSTAMP:${icsStamp(new Date().toISOString())}`,
-    `DTSTART:${icsStamp(k.starts_at)}`, `DTEND:${icsStamp(end)}`, `SUMMARY:${icsEsc(k.title)}`,
+    `DTSTART:${icsStamp(k.starts_at)}`, `DTEND:${icsStamp(end)}`, `SUMMARY:${icsEsc(k.title)}`, ...(k.location ? [`LOCATION:${icsEsc(k.location)}`] : []),
     'BEGIN:VALARM', 'ACTION:DISPLAY', `DESCRIPTION:${icsEsc(k.title)}`, 'TRIGGER:-PT1H', 'END:VALARM', 'END:VEVENT', 'END:VCALENDAR'].join('\r\n');
   const a = document.createElement('a');
   a.href = URL.createObjectURL(new Blob([body], { type: 'text/calendar' }));
@@ -1526,7 +1545,7 @@ function sheetView() {
   else if (s.type === 'paste') body = pasteSheet();
   else if (s.type === 'planpaste') body = planPasteSheet();
   else if (s.type === 'plan') body = planSheet();
-  else if (s.type === 'addcal') { const k = findRow('kid_items', s.id); body = k && k.starts_at ? `<h2>${esc(k.title)}</h2><div class="list opts"><a class="opt press" target="_blank" rel="noopener" href="${gcalLink(k)}">Google Calendar${ic('chev')}</a><button class="opt press" data-act="ics" data-id="${k.id}">Phone calendar, with a 1 hour alert${ic('chev')}</button></div>` : ''; }
+  else if (s.type === 'addcal') { const k = findRow('kid_items', s.id); body = k && k.starts_at ? `<h2>${esc(k.title)}</h2><div class="list opts"><a class="opt press" target="_blank" rel="noopener" href="${gcalLink(k)}">Google Calendar${ic('chev')}</a><button class="opt press" data-act="ics" data-id="${k.id}">Apple Calendar, with a 1 hour alert${ic('chev')}</button></div><p class="hint">To skip this step, pick your calendar in Settings.</p>` : ''; }
   if (!body) { ui.sheet = null; return ''; }
   return `<div class="scrim" data-act="close"></div><div class="bs${['addfrom', 'chore', 'meal', 'recipe', 'ingr', 'ai', 'paste', 'planpaste', 'plan'].includes(s.type) ? '' : ' short'}" role="dialog" aria-modal="true">
     <div class="grab" data-act="close"></div>${body}</div>`;
@@ -1595,6 +1614,10 @@ function settingsView() {
     <div class="grp rise">
       <label class="fl" for="nm">You<input id="nm" type="text" value="${esc(myName())}" placeholder="Add your name" maxlength="40" autocomplete="nickname" enterkeyhint="done"></label>
       <div class="fl">Partner<span class="v">${p ? esc(p.display_name) : 'Not signed in yet'}</span></div>
+    </div>
+    <p class="gt">This phone</p>
+    <div class="grp rise d1">
+      <div class="fl">Add to calendar<span class="seg sm">${[['google', 'Google'], ['apple', 'Apple'], ['', 'Ask']].map(([v, l]) => `<button class="${(calApp() || '') === v ? 'on' : ''}" data-act="calapp" data-v="${v}" aria-pressed="${(calApp() || '') === v}">${l}</button>`).join('')}</span></div>
     </div>
     <p class="gt">Theme</p>
     <div class="grp rise d1">
@@ -2068,6 +2091,7 @@ $app.addEventListener('click', (e) => {
     case 'kstat': updateRow('kid_items', id, { status: t.dataset.s }); return soft([[`[data-act="kstat"][data-id="${id}"][data-s="${t.dataset.s}"]`, 'jelly']]);
     case 'ksend': { const k = findRow('kid_items', id); if (k) addGrocery(k.title); return soft([[`.it:has([data-id="${id}"]) .onlist`, 'pop']]); }
     case 'kdel': removeRow('kid_items', id); ui.sheet = null; return soft();
+    case 'calapp': if (t.dataset.v) ls.set(K.calapp, t.dataset.v); else ls.del(K.calapp); return soft([[`[data-act="calapp"][data-v="${t.dataset.v}"]`, 'jelly']]);
     case 'addcal': ui.sheet = { type: 'addcal', id }; return soft();
     case 'ics': { const k = findRow('kid_items', id); if (k && k.starts_at) downloadIcs(k); ui.sheet = null; return soft(); }
     // event shifts

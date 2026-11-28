@@ -359,6 +359,8 @@ alter table public.day_settings add column if not exists union_end time not null
 alter table public.day_settings add column if not exists calendar_owner uuid;
 -- Who's taking a kid appointment: a user id or 'both'. Empty means not decided (or the other parent if one is working).
 alter table public.kid_items add column if not exists taker text check (taker is null or char_length(taker) <= 40);
+-- Where a kid appointment is (typed in the app; goes to the calendar event and maps).
+alter table public.kid_items add column if not exists location text check (location is null or char_length(location) <= 200);
 
 -- Lunch planning is off until someone turns it on in Settings.
 alter table public.day_settings add column if not exists lunch_plan boolean not null default false;
