@@ -267,10 +267,12 @@ button { background: none; border: 0; padding: 0; cursor: pointer; }
 .pop { animation: pop .38s cubic-bezier(.3,.7,.4,1.5) both; }
 @keyframes pop { from { transform: scale(.6); opacity: 0; } }
 /* Expand morph: + grows into "+ Add" once there's something to add. */
-.qa .add { width: 56px; gap: 6px; font: 700 15px var(--f-body); white-space: nowrap; display: flex; align-items: center; justify-content: center; }
-.qa .add span { max-width: 0; opacity: 0; overflow: hidden; transition: max-width .32s cubic-bezier(.2,.8,.2,1), opacity .2s; }
+.qa .add { width: 56px; gap: 0; font: 700 15px var(--f-body); white-space: nowrap; display: flex; align-items: center; justify-content: center; }
+/* The hidden label takes no space, so the + sits dead center until it morphs. */
+.qa .add span { max-width: 0; margin-left: 0; opacity: 0; overflow: hidden; transition: max-width .32s cubic-bezier(.2,.8,.2,1), margin-left .32s, opacity .2s; }
 .qa .add.ready { width: 96px; }
-.qa .add.ready span { max-width: 40px; opacity: 1; }
+.qa .add.ready span { max-width: 40px; margin-left: 6px; opacity: 1; }
+.add svg.i { width: 24px; height: 24px; stroke-width: 2.8; }
 /* Glow pulse: rings breathe around the ready button. */
 .qa .add.ready { animation: glow 1.8s ease-in-out infinite; }
 @keyframes glow { 0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--acc) 45%, transparent), 0 6px 14px color-mix(in srgb, var(--acc) 28%, transparent); } 50% { box-shadow: 0 0 0 9px color-mix(in srgb, var(--acc) 0%, transparent), 0 6px 14px color-mix(in srgb, var(--acc) 28%, transparent); } }

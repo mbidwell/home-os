@@ -7,7 +7,7 @@ const T = window.homeosTheme;
 const Q = new URLSearchParams(location.search);
 const PREVIEW = T.isPreview ? Q.get('preview') : null; // local screenshots only
 const $app = document.getElementById('app');
-const K = { profiles: 'homeos-profiles', queue: 'homeos-queue', rows: 'homeos-rows', loc: 'homeos-kitchen-loc', later: 'homeos-partner-later', debug: 'homeos-debug' };
+const K = { profiles: 'homeos-profiles', queue: 'homeos-queue', rows: 'homeos-rows', loc: 'homeos-kitchen-loc', later: 'homeos-partner-later', stores: 'homeos-store-memory', debug: 'homeos-debug' };
 const TABLES = ['grocery_items', 'staples', 'pantry_items'];
 
 const ls = {
@@ -21,6 +21,7 @@ const state = {
   profiles: ls.get(K.profiles, []),
   rows: { ...emptyRows(), ...ls.get(K.rows, {}) },
   queue: ls.get(K.queue, []),
+  storeMemory: ls.get(K.stores, {}), // item name -> store it was last bought at
   member: true,
   fetched: false,
   flushing: false,
@@ -186,10 +187,16 @@ async function pull() {
       if (!state.member) {
         state.error = "This account isn't in the household yet. Add its user ID to household_members (README, step 4).";
       } else {
-        const [profiles, ...tables] = await Promise.all([
+        const [profiles, history, ...tables] = await Promise.all([
           api.rest('profiles?select=user_id,display_name,updated_at&deleted_at=is.null'),
+          // Where each item was bought before, including cleared ones: new adds go to that store.
+          api.rest('grocery_items?select=name,store&store=not.is.null&order=updated_at.desc&limit=500'),
           ...TABLES.map((t) => api.rest(`${t}?select=*&deleted_at=is.null&order=created_at.asc`))
         ]);
+        const mem = {};
+        for (const h of history) if (!(norm(h.name) in mem)) mem[norm(h.name)] = h.store;
+        state.storeMemory = mem;
+        ls.set(K.stores, mem);
         state.profiles = profiles;
         TABLES.forEach((t, i) => { state.rows[t] = tables[i]; });
         overlayQueue();
@@ -296,6 +303,7 @@ function saveName(name) {
 }
 
 function resetLocal() {
+  state.storeMemory = {}; ls.del(K.stores);
   state.profiles = []; state.rows = emptyRows(); state.queue = []; state.fetched = false; state.error = null; state.netFail = false; state.member = true;
   ls.del(K.profiles); ls.del(K.rows); ls.del(K.queue);
 }
@@ -306,10 +314,10 @@ function addGrocery(name, extra = {}) {
   if (!name) return null;
   const dup = onGrocery(name, extra.pantry_item_id);
   if (dup) return dup;
-  // Remember the store from staples or the Costco list when we know it.
+  // Pick the store: where it was last bought, else its staple or Costco list entry, else Unsorted.
   if (!('store' in extra)) {
     const s = live('staples').find((x) => norm(x.name) === norm(name) && x.store);
-    extra.store = s ? s.store : null;
+    extra.store = state.storeMemory[norm(name)] || (s ? s.store : null);
   }
   return insertRow('grocery_items', { name, store: null, note: null, pantry_item_id: null, checked_at: null, ...extra });
 }
@@ -716,7 +724,12 @@ $app.addEventListener('click', (e) => {
     case 'gcheck': toggleGrocery(id); return soft([[`[data-act="gcheck"][data-id="${id}"]`, 'jelly']]);
     case 'gclear': groceryDone().forEach((g) => removeRow('grocery_items', g.id)); return soft();
     case 'gitem': ui.sheet = { type: 'gitem', id }; return soft();
-    case 'gstore': updateRow('grocery_items', id, { store: t.dataset.store || null }); ui.sheet = null; return soft();
+    case 'gstore': {
+      const g = findRow('grocery_items', id), store = t.dataset.store || null;
+      updateRow('grocery_items', id, { store });
+      if (g && store) { state.storeMemory[norm(g.name)] = store; ls.set(K.stores, state.storeMemory); } // next time it goes straight there
+      ui.sheet = null; return soft();
+    }
     case 'gdel': removeRow('grocery_items', id); ui.sheet = null; return soft();
     // add-from sheet
     case 'addfrom': ui.sheet = { type: 'addfrom', tab: t.dataset.tab }; ui.newGroup = null; return soft();

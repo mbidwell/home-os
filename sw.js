@@ -1,7 +1,7 @@
 // Home OS service worker.
 // Bump VERSION every release. This worker only ever deletes caches it owns (homeos-*).
 // Other apps on this origin keep their own caches and storage untouched.
-const VERSION = 'homeos-shell-v7';
+const VERSION = 'homeos-shell-v8';
 const FONTS = 'homeos-fonts-v1';
 const OWN = [VERSION, FONTS];
 const SHELL = [
