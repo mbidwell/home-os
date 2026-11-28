@@ -215,3 +215,9 @@ test('auto-add: only what is missing, never basics', () => {
   assert.deepEqual(missingFor(ing, ['Shredded cheese', 'Chicken thigh'], ['Tortillas']), [{ name: 'Limes', qty: '2' }]);
   assert.deepEqual(missingFor('', [], []), []);
 });
+
+test('meals we did not like are named so the AI avoids them', () => {
+  const p = buildPrompt({ range: 'x', kitchen: {}, low: [], out: [], days: [], recipes: [], avoid: ['Fish tacos'] });
+  assert.match(p, /please don’t suggest them: Fish tacos\./);
+  assert.doesNotMatch(buildPrompt({ range: 'x', kitchen: {}, low: [], out: [], days: [], recipes: [] }), /didn’t like/);
+});

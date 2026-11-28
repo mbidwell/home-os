@@ -116,7 +116,7 @@ export function parsePasted(text) {
  * days: [{ label: 'Mon', dinner: 'Chicken tacos' | null, lunch?: string | null }]
  * recipes: [{ title, ingredients }]
  */
-export function buildPrompt({ range, kitchen, low, out, days, recipes, lunch = false, gear = [], recent = [] }) {
+export function buildPrompt({ range, kitchen, low, out, days, recipes, lunch = false, gear = [], recent = [], avoid = [] }) {
   const L = [];
   L.push(`Help me plan ${lunch ? 'lunches and dinners' : 'dinners'} for ${range} for our family: two adults and two young kids. Keep weeknights simple; one-pot and sheet-pan meals are good options.`);
   if (gear.length) L.push(`Appliances we have: ${gear.join(', ')}. Only use these.`);
@@ -140,6 +140,7 @@ export function buildPrompt({ range, kitchen, low, out, days, recipes, lunch = f
   if (away.length) L.push(`Shift nights: ${away.join(', ')}. One adult is at work over dinner, so those dinners are just for one adult and the kids: smaller and quick.`);
   if (call.length) L.push(`On call: ${call.join(', ')}. One adult might get called in, so keep those dinners flexible.`);
   if (recent.length) L.push(`Recent dinners (we like variety, so avoid repeating these): ${recent.join(', ')}.`);
+  if (avoid.length) L.push(`We didn’t like these, so please don’t suggest them: ${avoid.join(', ')}.`);
   L.push('');
   if (recipes.length) {
     const favs = recipes.filter((r) => r.favorite).map((r) => r.title);

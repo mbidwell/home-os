@@ -6,20 +6,22 @@ import * as D from './day.js';
 import * as M from './meals.js';
 import * as F from './fit.js';
 import * as C from './cheer.js';
+import * as A from './aisles.js';
+import * as R from './routines.js';
 
-const VERSION = '21';
+const VERSION = '23';
 const T = window.homeosTheme;
 const Q = new URLSearchParams(location.search);
 const PREVIEW = T.isPreview ? Q.get('preview') : null; // local screenshots only
 const $app = document.getElementById('app');
-const K = { profiles: 'homeos-profiles', queue: 'homeos-queue', rows: 'homeos-rows', loc: 'homeos-kitchen-loc', later: 'homeos-partner-later', stores: 'homeos-store-memory', choreTab: 'homeos-chore-tab', lists: 'homeos-task-lists', who: 'homeos-chore-who', debug: 'homeos-debug', ktab: 'homeos-kitchen-tab', calapp: 'homeos-cal-app', seen: 'homeos-cheer-seen' };
+const K = { profiles: 'homeos-profiles', queue: 'homeos-queue', rows: 'homeos-rows', loc: 'homeos-kitchen-loc', later: 'homeos-partner-later', stores: 'homeos-store-memory', choreTab: 'homeos-chore-tab', lists: 'homeos-task-lists', who: 'homeos-chore-who', debug: 'homeos-debug', ktab: 'homeos-kitchen-tab', calapp: 'homeos-cal-app', seen: 'homeos-cheer-seen', gstore: 'homeos-grocery-store', backup: 'homeos-last-backup' };
 const TABLES = ['grocery_items', 'staples', 'pantry_items', 'tasks', 'task_events',
-  'calendar_events', 'calendar_sync', 'day_settings', 'day_overrides', 'kid_items', 'recipes', 'meal_plan', 'cheers'];
+  'calendar_events', 'calendar_sync', 'day_settings', 'day_overrides', 'kid_items', 'recipes', 'meal_plan', 'cheers', 'routines'];
 // Tables keyed by something other than id.
 const PK = { calendar_events: 'uid', calendar_sync: 'source', day_settings: 'id', day_overrides: 'date', meal_plan: 'slot' };
 const pkOf = (t) => PK[t] || 'id';
 // Newer tables: if one isn't set up yet, keep going without it instead of failing the whole sync.
-const OPTIONAL = new Set(['calendar_events', 'calendar_sync', 'day_settings', 'day_overrides', 'kid_items', 'recipes', 'meal_plan', 'cheers']);
+const OPTIONAL = new Set(['calendar_events', 'calendar_sync', 'day_settings', 'day_overrides', 'kid_items', 'recipes', 'meal_plan', 'cheers', 'routines']);
 // What each table pulls. History (task_events) is add-only: the most recent stretch is enough on a phone.
 const TABLE_Q = {
   task_events: 'task_events?select=*&order=at.desc&limit=800',
@@ -37,7 +39,7 @@ const ls = {
   del(k) { try { localStorage.removeItem(k); } catch {} }
 };
 
-const emptyRows = () => ({ grocery_items: [], staples: [], pantry_items: [], tasks: [], task_events: [], calendar_events: [], calendar_sync: [], day_settings: [], day_overrides: [], kid_items: [], recipes: [], meal_plan: [], cheers: [] });
+const emptyRows = () => ({ grocery_items: [], staples: [], pantry_items: [], tasks: [], task_events: [], calendar_events: [], calendar_sync: [], day_settings: [], day_overrides: [], kid_items: [], recipes: [], meal_plan: [], cheers: [], routines: [] });
 const state = {
   profiles: ls.get(K.profiles, []),
   rows: { ...emptyRows(), ...ls.get(K.rows, {}) },
@@ -51,7 +53,7 @@ const state = {
   error: null
 };
 // Screen-only state (not synced).
-const ui = { sheet: null, edit: false, newGroup: null, loc: ls.get(K.loc, 'fridge'), choreTab: ls.get(K.choreTab, 'chores'), who: ls.get(K.who, 'all'), showLater: false, showDone: false, howto: null, taskCat: 'House', resetCount: null, calTab: 'week', ktab: ls.get(K.ktab, 'stock'), week: 0, ingr: {}, ingrDays: null, plan: null, planErr: null };
+const ui = { gstore: ls.get(K.gstore, 'all'), sheet: null, edit: false, newGroup: null, loc: ls.get(K.loc, 'fridge'), choreTab: ls.get(K.choreTab, 'chores'), who: ls.get(K.who, 'all'), showLater: false, showDone: false, howto: null, taskCat: 'House', resetCount: null, calTab: 'week', ktab: ls.get(K.ktab, 'stock'), week: 0, ingr: {}, ingrDays: null, plan: null, planErr: null };
 
 /* ---------- constants ---------- */
 const STORES = [['costco', 'Costco'], ['wegmans', 'Wegmans'], ['publix', 'Publix'], ['harris_teeter', 'Harris Teeter']];
@@ -167,8 +169,12 @@ if (PREVIEW) {
   else if (Q.get('msheet') === 'kid') ui.sheet = { type: 'kid', id: 'k1' };
   else if (Q.get('msheet') === 'addcal') ui.sheet = { type: 'addcal', id: 'k1' };
   else if (Q.get('msheet')) ui.sheet = Q.get('msheet') === 'recipe' ? { type: 'recipe', id: 'r1' } : Q.get('msheet') === 'meal' ? { type: 'meal', slot: M.slotOf(S.addDays(today, 1)) } : { type: Q.get('msheet') };
+  state.rows.routines = [{ id: 'w1', title: 'Music class', who: 'kids', weekdays: [1, 3, 5], start_time: '09:00', end_time: '13:00', breaks: [] }, { id: 'w2', title: 'Study group', who: 'p', weekdays: [3], start_time: '09:00', end_time: '12:00', breaks: [{ from: S.addDays(today, 20), to: S.addDays(today, 40), label: 'Winter break' }] }];
+  if (Q.get('msheet') === 'routine') ui.sheet = { type: 'routine', id: 'w2' };
+  state.rows.pantry_items.push({ id: 'lo1', name: 'Leftover chili', location: 'fridge', status: 'have', made_on: S.addDays(today, -3) });
   state.rows.cheers = [{ id: 'n1', to_user: 'me', created_by: 'p', text: 'I love you. Thank you for everything you do.', created_at: now }, { id: 'n2', to_user: 'p', created_by: 'me', text: 'You make this house a home.', created_at: now }];
   if (Q.get('cheer')) setTimeout(() => cheer(Q.get('cheer'), true), 600);
+  if (Q.get('undo')) setTimeout(() => offerUndo('Done: Water the plants', () => {}), 600);
   if (Q.get('union')) state.rows.day_overrides.push({ date: today, union_day: true });
   if (Q.get('owner')) state.rows.day_settings[0].calendar_owner = Q.get('owner'); // 'me' or 'p' (see it as the partner)
   if (Q.get('cal')) ui.calTab = Q.get('cal');
@@ -293,6 +299,33 @@ function updateRow(table, id, patch) {
   flush();
 }
 const removeRow = (table, id) => updateRow(table, id, { deleted_at: new Date().toISOString() });
+// Bring back a soft-deleted row, even if a refresh already dropped it from this phone.
+function restoreRow(table, snap) {
+  if (!snap) return;
+  if (!findRow(table, snap.id)) { state.rows[table].push({ ...snap }); }
+  updateRow(table, snap.id, { deleted_at: null });
+}
+
+/* ---------- undo: a few seconds to take back a tap ---------- */
+let undoTimer = 0;
+function offerUndo(label, fn) {
+  document.querySelector('.undo')?.remove();
+  const el = document.createElement('div');
+  el.className = 'undo';
+  el.setAttribute('role', 'status');
+  el.innerHTML = `<span>${esc(label)}</span><button type="button" class="press">Undo</button>`;
+  const close = () => { el.classList.add('out'); document.body.classList.remove('has-undo'); setTimeout(() => el.remove(), 300); };
+  el.querySelector('button').addEventListener('click', () => { clearTimeout(undoTimer); fn(); close(); document.querySelector('.cheer')?.remove(); render({ soft: true, keepFocus: '__none' }); });
+  document.body.appendChild(el);
+  document.body.classList.add('has-undo');
+  clearTimeout(undoTimer);
+  undoTimer = setTimeout(close, 6000);
+}
+// Undo a chore or task check-off: put its date back and mark the history entry as taken back.
+function undoClose(c, prev, ev) {
+  updateRow('tasks', c.id, prev);
+  if (ev) updateRow('task_events', ev.id, { undone_at: new Date().toISOString() });
+}
 
 /** Save fields on a row keyed by its natural key (a date, an event uid), creating it if needed. */
 function saveKeyed(table, key, patch) {
@@ -547,9 +580,20 @@ function groceryRow(g) {
     ${!done && !g.store ? `<button class="tag press" data-act="gitem" data-id="${g.id}">Tag store</button>` : ''}</div>`;
 }
 
+// Store mode: the aisle each item is in, using its Costco-list category as a hint.
+const aisleFor = (g) => A.aisleOf(g.name, live('staples').find((x) => norm(x.name) === norm(g.name))?.category);
+const byAisle = (a, b) => (A.aisleRank(aisleFor(a)) - A.aisleRank(aisleFor(b))) || a.name.localeCompare(b.name);
 function groceryView() {
   const open = groceryOpen(), done = groceryDone();
-  const groups = [[null, 'Unsorted'], ...STORES].map(([k, label]) => [label, open.filter((g) => (g.store || null) === k)]).filter(([, items]) => items.length);
+  const counts = [['all', 'All', open.length], ...STORES.map(([k, l]) => [k, l, open.filter((g) => g.store === k).length]), ['none', 'No store', open.filter((g) => !g.store).length]];
+  const pick = counts.some(([k, , n]) => k === ui.gstore && (n || k === 'all')) ? ui.gstore : 'all';
+  const storeChips = open.length ? `<div class="fchips rise">${counts.filter(([k, , n]) => k === 'all' || n).map(([k, l, n]) => `<button class="fchip press${pick === k ? ' on' : ''}" data-act="gstorepick" data-v="${k}">${k === 'all' ? l : `${l} · ${n}`}</button>`).join('')}</div>` : '';
+  let groups;
+  if (pick === 'all') groups = [[null, 'Unsorted'], ...STORES].map(([k, label]) => [label, open.filter((g) => (g.store || null) === k).sort(byAisle)]).filter(([, items]) => items.length);
+  else {
+    const here = open.filter((g) => (pick === 'none' ? !g.store : g.store === pick));
+    groups = A.AISLES.map((a) => [a, here.filter((g) => aisleFor(g) === a).sort((x, y) => x.name.localeCompare(y.name))]).filter(([, items]) => items.length);
+  }
   return `${header(open.length ? `${open.length} to get` : 'All set', 'Grocery')}
   <main>
     <form class="qa rise" data-form="gadd" autocomplete="off">
@@ -558,7 +602,8 @@ function groceryView() {
       <div class="chips"><button type="button" class="chip press" data-act="addfrom" data-tab="staples">${ic('star')}Staples</button><button type="button" class="chip press" data-act="addfrom" data-tab="costco">${ic('bag')}Buy at Costco</button></div>
     </form>
     ${!open.length && !done.length ? `<p class="empty">Nothing on the list. Add things as you think of them, or tap Staples.</p>` : ''}
-    ${groups.map(([label, items]) => `${sec(label, items.length)}<div class="list">${items.map(groceryRow).join('')}</div>`).join('')}
+    ${storeChips}
+    ${groups.map(([label, items]) => `${sec(label, items.length)}<div class="list${pick !== 'all' ? ' instore' : ''}">${items.map(groceryRow).join('')}</div>`).join('')}
     ${done.length ? `<div class="sec"><b>Got it</b><button class="clear press" data-act="gclear">Clear ${done.length}</button></div><div class="list">${done.map(groceryRow).join('')}</div>` : ''}
   </main>
   ${dock('grocery')}`;
@@ -577,7 +622,8 @@ function pantryRow(p) {
       ? `<span class="onlist">${ic('check')}On grocery</span>`
       : `<span class="send press" data-act="psend" data-id="${p.id}" role="button">${ic('plus')}Grocery</span>`;
   }
-  return `<div class="it"><div class="nm"><button class="nmb" data-act="pitem" data-id="${p.id}">${esc(p.name)}</button>${sub}</div>${hlo(p)}</div>`;
+  const age = p.made_on ? `<span class="age${ageDays(p) >= 3 ? ' old' : ''}">${esc(ageLabel(p))}</span>` : '';
+  return `<div class="it"><div class="nm"><button class="nmb" data-act="pitem" data-id="${p.id}">${esc(p.name)}</button>${age}${sub}</div>${hlo(p)}</div>`;
 }
 
 function stockView() {
@@ -601,7 +647,8 @@ function stockView() {
     ${hero}
     <form class="qa slim rise" data-form="padd" autocomplete="off"><div class="row">
       <input class="fld" name="name" type="text" placeholder="Add to ${locName(loc).toLowerCase()}" maxlength="80" enterkeyhint="done" aria-label="Add to ${locName(loc).toLowerCase()}">
-      <button class="add press" type="submit" aria-label="Add">${ic('plus')}</button></div></form>
+      <button class="add press" type="submit" aria-label="Add">${ic('plus')}</button></div>
+      ${loc === 'fridge' ? `<div class="chips"><button type="button" class="chip press" data-act="leftover">${ic('plus')}Leftovers</button></div>` : ''}</form>
     ${!here.length ? `<p class="empty">Nothing in the ${locName(loc).toLowerCase()} yet. Add what you keep here, then mark it Low or Out when it runs down.</p>` : ''}
     ${block('out', 'Out')}${block('low', 'Low')}${block('have', 'Have')}
   </main>
@@ -613,7 +660,7 @@ const KTABS = [['stock', 'Stock'], ['meals', 'Meals'], ['recipes', 'Recipes']];
 const kseg = () => `<div class="seg ktabs rise" role="group" aria-label="Kitchen">${KTABS.map(([k, l]) => `<button class="${ui.ktab === k ? 'on' : ''}" data-act="ktab" data-v="${k}" aria-pressed="${ui.ktab === k}">${l}</button>`).join('')}</div>`;
 function kitchenView() { return ui.ktab === 'meals' ? mealsView() : ui.ktab === 'recipes' ? recipesView() : stockView(); }
 
-const recipes = () => live('recipes').sort((a, b) => (!!b.favorite - !!a.favorite) || a.title.localeCompare(b.title)); // starred first
+const recipes = () => live('recipes').sort((a, b) => (!!a.never_again - !!b.never_again) || (!!b.favorite - !!a.favorite) || a.title.localeCompare(b.title)); // starred first, never-again last
 const lunchOn = () => !!daySet().lunch_plan;
 const autoGrocery = () => daySet().auto_grocery !== false; // on unless turned off
 // Plan a meal. When a recipe goes on a day (today or later), what it needs that the kitchen doesn't have goes on the
@@ -665,7 +712,7 @@ function lastHad(id) {
   return live('meal_plan').filter((m) => m.recipe_id === id && m.date < td).reduce((a, m) => (m.date > a ? m.date : a), '');
 }
 const hadLine = (r) => { const d = lastHad(r.id); return d ? `had ${M.agoLabel(d, todayStr())}` : 'not had yet'; };
-const tagLine = (r) => [M.methodLabel(r.method), r.quick && 'Quick', r.kid_friendly && 'Kids like it'].filter(Boolean).join(' · ');
+const tagLine = (r) => [r.never_again && 'Not again', M.methodLabel(r.method), r.quick && 'Quick', r.kid_friendly && 'Kids like it'].filter(Boolean).join(' · ');
 // Freezer items needed for a day's planned meals: [{ item, recipe }].
 function thawFor(date) {
   const frozen = pantry().filter((p) => (p.location === 'freezer' || p.location === 'garage_freezer') && p.status !== 'out');
@@ -782,6 +829,7 @@ function recipeSheet(r) {
       <div class="list frm">
         <button class="frow swr" role="switch" aria-checked="${!!r.quick}" data-act="rtag" data-k="quick" data-id="${r.id}">Quick (30 minutes or less)<span class="tg" aria-hidden="true"></span></button>
         <button class="frow swr" role="switch" aria-checked="${!!r.kid_friendly}" data-act="rtag" data-k="kid_friendly" data-id="${r.id}">Kids like it<span class="tg" aria-hidden="true"></span></button>
+        <button class="frow swr" role="switch" aria-checked="${!!r.never_again}" data-act="rtag" data-k="never_again" data-id="${r.id}">Never again<span class="tg" aria-hidden="true"></span></button>
       </div>
       ${sec('Plan it', hadLine(r))}
       <div class="picks2 again">${[0, 1, 2, 3, 4, 5, 6].map((i) => { const d = S.addDays(todayStr(), i), on = findRow('meal_plan', M.slotOf(d))?.recipe_id === r.id; return `<button class="pick press${on ? ' on' : ''}" data-act="ragain" data-id="${r.id}" data-date="${d}" aria-pressed="${on}">${i === 0 ? 'Tonight' : shortDay(d, { weekday: 'short' })}</button>`; }).join('')}</div>
@@ -842,7 +890,8 @@ function aiContext(from) {
   return {
     kitchen, low: names((p) => p.status === 'low'), out: names((p) => p.status === 'out'),
     recent: [...new Set(live('meal_plan').filter((m) => m.meal === 'dinner' && m.date < from && m.date >= S.addDays(from, -14)).sort((a, b) => b.date.localeCompare(a.date)).map((m) => mealTitle(m)).filter(Boolean))],
-    recipes: recipes().slice(0, 40),
+    recipes: recipes().filter((r) => !r.never_again).slice(0, 40),
+    avoid: recipes().filter((r) => r.never_again).map((r) => r.title),
     gear: GEAR.filter(([k]) => gear().includes(k)).map(([, l]) => l.toLowerCase())
   };
 }
@@ -948,21 +997,22 @@ const passWho = (t) => ui.who === 'all' || whoKey(t) === ui.who;
 const missed = (today) => choresAll().filter((c) => c.active && S.isOverdue(c, today));
 const TASK_LISTS = ['House', 'Kids', 'Errands'];
 const taskLists = () => [...new Set([...TASK_LISTS, ...tasksAll().map((t) => t.category).filter(Boolean), ...ls.get(K.lists, [])])];
-const eventsOf = (id) => live('task_events').filter((e) => e.task_id === id).sort((a, b) => String(b.at).localeCompare(String(a.at)));
+const eventsOf = (id) => live('task_events').filter((e) => e.task_id === id && !e.undone_at).sort((a, b) => String(b.at).localeCompare(String(a.at)));
 
 function recordEvent(t, kind, due) {
-  insertRow('task_events', { task_id: t.id, kind, due_date: due, at: new Date().toISOString(), by_user: myId() }, { conflict: 'task_id,kind,due_date' });
+  return insertRow('task_events', { task_id: t.id, kind, due_date: due, at: new Date().toISOString(), by_user: myId() }, { conflict: 'task_id,kind,due_date' });
 }
 
 // Done or skip closes the open instance and schedules the next one. One open instance per chore, never a stack.
 function closeChore(c, kind) {
   const today = todayStr();
   if (c.kind === 'task' || c.repeat_mode === 'once') {
-    if (kind === 'done') { recordEvent(c, 'done', c.due_date || today); updateRow('tasks', c.id, { done_at: new Date().toISOString() }); }
-    return;
+    if (kind === 'done') { const ev = recordEvent(c, 'done', c.due_date || today); updateRow('tasks', c.id, { done_at: new Date().toISOString() }); return ev; }
+    return null;
   }
-  recordEvent(c, kind, c.due_date || today);
+  const ev = recordEvent(c, kind, c.due_date || today);
   updateRow('tasks', c.id, { due_date: S.nextDue(c, today) });
+  return ev;
 }
 
 // Sunday reset: frequent misses start fresh; monthly-or-longer ones and tasks stay until done. History is kept.
@@ -1159,7 +1209,7 @@ function taskSheet(t) {
 const TZ = Intl.DateTimeFormat().resolvedOptions().timeZone;
 const FN_URL = `${(window.HOMEOS_CONFIG?.supabaseUrl || '').replace(/\/+$/, '')}/functions/v1/calendar-sync`;
 const daySet = () => ({ nap_start: '13:00', nap_end: '16:00', nap_minutes: 120, dinner: '18:00', bed: '20:00', post_call_hours: 10, union_start: '09:00', union_end: '17:00', ...(state.rows.day_settings[0] || {}) });
-const nowHM = () => hhmmOf(new Date().toISOString());
+const nowHM = () => hhmmOf(T.now().toISOString()); // preview clock aware
 const hm = (t) => String(t || '').slice(0, 5);
 function clock(t, withAp = true) { // '13:30' -> '1:30 PM'
   const [h, m] = hm(t).split(':').map(Number);
@@ -1247,6 +1297,13 @@ function takerLine(k) {
 }
 // On the owner's phone, an appointment they can't make drops to a quiet line instead of their timeline.
 const quietForMe = (k) => !!calOwner() && calOwner() === myId() && atWork(k) && takerOf(k) !== myId() && takerOf(k) !== 'both';
+// Weekly routines: preschool, a study group. Shared; each says who it's for.
+const routinesOn = (date) => live('routines').filter((r) => R.occursOn(r, date)).sort((a, b) => hm(a.start_time).localeCompare(hm(b.start_time)));
+function routineWho(r) {
+  if (!r.who || r.who === 'kids') return 'Kids';
+  if (r.who === 'family') return 'Family';
+  return r.who === myId() ? 'You' : userName(r.who);
+}
 const apptsOn = (date) => kidsAll().filter((k) => k.kind === 'appointment' && k.starts_at && D.localDateOf(Date.parse(k.starts_at), TZ) === date);
 
 // Ask the server to re-read the calendars (at most every few minutes from this phone), then refresh.
@@ -1273,6 +1330,7 @@ function timeline(date) {
     items.push({ k: hhmmOf(e.starts_at), t: timeOf(e.starts_at), w: e.kind === 'meeting' ? 'Work meeting' : e.title || 'Busy', sub: e.kind === 'event_shift' ? `${D.hoursLabel(e.starts_at, e.ends_at, TZ, true)}` : dur, tag: e.kind === 'event_shift' ? 'Event shift' : '', cls: 'ev' });
   }
   if (unionOn(date) && canUnion(date)) items.push({ k: hm(daySet().union_start), t: span(daySet().union_start, daySet().union_end), w: 'Union office', sub: 'Union EMS', cls: 'ev' });
+  for (const r of routinesOn(date)) items.push({ k: hm(r.start_time), t: span(r.start_time, r.end_time), w: r.title, sub: routineWho(r), cls: 'ev' });
   for (const a of apptsOn(date)) if (!quietForMe(a)) items.push({ k: hhmmOf(a.starts_at), t: timeOf(a.starts_at), w: a.title, sub: ['Kids', takerLine(a)].filter(Boolean).join(' · '), tag: !mine() && atWork(a) ? `${ownerName()}’s working` : '', cls: 'ev', go: '#/kids' });
   items.push(napSet
     ? { k: hm(nap[0]), t: span(nap[0], nap[1]), w: 'Nap', sub: '', nap: true }
@@ -1358,10 +1416,10 @@ function todayCards(today) {
 const notesForMe = () => live('cheers').filter((n) => n.to_user === myId()).map((n) => ({ id: n.id, text: n.text, from: userName(n.created_by) }));
 const myNotes = () => live('cheers').filter((n) => n.created_by === myId()).sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)));
 let cheerTimer = 0;
-function cheer(kind, force = false) {
+function cheer(kind, force = false, text = null) {
   if (!force && !C.shouldCheer(kind, Math.random())) return;
   const pn = partnerId() ? userName(partnerId()) : '';
-  const c = C.pickCheer(kind, { partner: pn === 'Partner' ? '' : pn, notes: notesForMe(), seen: ls.get(K.seen, []) });
+  const c = text ? { text, from: null, noteId: null } : C.pickCheer(kind, { partner: pn === 'Partner' ? '' : pn, notes: notesForMe(), seen: ls.get(K.seen, []) });
   if (c.noteId) ls.set(K.seen, [...new Set([...ls.get(K.seen, []), c.noteId])].slice(-200));
   document.querySelector('.cheer')?.remove();
   const el = document.createElement('div');
@@ -1389,7 +1447,7 @@ function todoToday(td) {
   const mine = chores.filter(mineOrEither).sort((a, b) => S.shownDue(a, td).localeCompare(S.shownDue(b, td)) || a.title.localeCompare(b.title));
   const theirs = chores.filter((c) => !mineOrEither(c)).length;
   const myTasks = tasks.filter((t) => !t.assignee || t.assignee === myId()).sort((a, b) => (b.priority - a.priority) || String(a.due_date || '9').localeCompare(String(b.due_date || '9')));
-  const doneToday = live('task_events').filter((e) => e.kind === 'done' && e.by_user === myId() && D.localDateOf(Date.parse(e.at), TZ) === td).length;
+  const doneToday = live('task_events').filter((e) => e.kind === 'done' && !e.undone_at && e.by_user === myId() && D.localDateOf(Date.parse(e.at), TZ) === td).length;
   return { mine, myTasks, theirs, doneToday };
 }
 function taskRowToday(t, td) {
@@ -1406,10 +1464,70 @@ function todoHtml(td) {
   return `${sec('To do today', n)}<div class="list todo rise d1">${mine.map((c) => choreRow(c, td)).join('')}${myTasks.map((t) => taskRowToday(t, td)).join('')}</div>${foot ? `<p class="upd">${esc(foot)}</p>` : ''}`;
 }
 
+// After 7 PM: tomorrow at a glance, so the next day gets planned the night before.
+function tomorrowHtml(td) {
+  if (nowHM() < '19:00') return '';
+  const tm = S.addDays(td, 1), st = statusOf(tm);
+  const din = mealOf(M.slotOf(tm)), r = din && din.recipe_id ? findRow('recipes', din.recipe_id) : null;
+  const shift = calSync().setup ? `${mine() ? 'You' : esc(ownerName())}: ${esc(chipTextU(st))}` : '';
+  const dinner = din ? `Dinner: ${esc(mealTitle(din))}${r && r.method ? ` · ${esc(M.methodLabel(r.method))}` : ''}` : 'No dinner planned yet';
+  return `${sec('Tomorrow', shortDay(tm, { weekday: 'long' }))}<a class="card press rise d1" href="#/calendar"><div class="ic">${ic('cal')}</div><div><b>${shift || shortDay(tm, { weekday: 'long', month: 'short', day: 'numeric' })}</b><small>${dinner}</small></div></a>${tlHtml(tm, false)}`;
+}
+
 // Time-sensitive nudges, gathered into one slim list instead of a stack of big cards.
+// Tonight (after 7:30 PM) or last night's dinner, until someone rates it.
+function rateRow(td) {
+  const d = nowHM() >= '19:30' ? td : S.addDays(td, -1);
+  const m = mealOf(M.slotOf(d));
+  if (!m || m.rating) return '';
+  const b = (v, l) => `<button class="mini press" data-act="rate" data-slot="${m.slot}" data-v="${v}">${l}</button>`;
+  return `<div class="card rate"><div class="ic">${ic('star')}</div><div><b>How was ${esc(mealTitle(m))}?</b><small>${d === td ? 'Tonight' : 'Last night'}. It helps plan meals you’ll actually eat.</small><div class="rbtns">${b('loved', 'Loved it')}${b('fine', 'Fine')}${b('never', 'Never again')}</div></div></div>`;
+}
+// Leftovers: food-safety guidance is 3 to 4 days in the fridge.
+const ageDays = (p) => (p.made_on ? S.diffDays(todayStr(), p.made_on) : null);
+function ageLabel(p) {
+  const n = ageDays(p);
+  if (n == null) return '';
+  const base = n <= 0 ? 'Made today' : n === 1 ? '1 day old' : `${n} days old`;
+  return n >= 5 ? `${base} · toss it` : n >= 3 ? `${base} · eat soon` : base;
+}
+function leftoverRows() {
+  return pantry().filter((p) => p.made_on && ageDays(p) >= 3).sort((a, b) => a.made_on.localeCompare(b.made_on)).map((p) =>
+    `<div class="card"><div class="ic">${ic('box')}</div><div><b>${esc(p.name)}</b><small>${esc(ageLabel(p))}.</small></div><button class="mini press go" data-act="lodone" data-id="${p.id}" data-v="ate">Ate it</button><button class="mini press" data-act="lodone" data-id="${p.id}" data-v="tossed">Tossed</button></div>`).join('');
+}
+// Sunday (and Monday morning): what the two of you got done this week.
+function weekCounts(td) {
+  const from = S.addDays(td, -6);
+  const inWeek = (iso) => { const d = D.localDateOf(Date.parse(iso), TZ); return d >= from && d <= td; };
+  const done = live('task_events').filter((e) => e.kind === 'done' && !e.undone_at && inWeek(e.at));
+  const kindOf = (e) => findRow('tasks', e.task_id)?.kind;
+  const chores = done.filter((e) => kindOf(e) !== 'task').length, tasks = done.filter((e) => kindOf(e) === 'task').length;
+  const dinners = live('meal_plan').filter((m) => m.meal === 'dinner' && (m.recipe_id || m.text) && m.date >= from && m.date <= td).length;
+  return { chores, tasks, dinners, total: chores + tasks + dinners };
+}
+function recapRow(td) {
+  const wd = S.weekdayOf(td);
+  if (!(wd === 0 || (wd === 1 && nowHM() < '12:00'))) return '';
+  const end = wd === 0 ? td : S.addDays(td, -1), c = weekCounts(end);
+  if (!c.total) return '';
+  const parts = [c.chores && plural(c.chores, 'chore'), c.tasks && plural(c.tasks, 'task'), c.dinners && plural(c.dinners, 'dinner')].filter(Boolean).join(' · ');
+  return `<button class="card press cardbtn" data-act="recap" data-n="${c.total}"><div class="ic">${ic('star')}</div><div><b>This week together: ${plural(c.total, 'thing')}</b><small>${parts}. Teamwork.</small></div>${ic('chev')}</button>`;
+}
+// A monthly nudge to save a copy of everything.
+function backupRow() {
+  const last = ls.get(K.backup, null);
+  if (last && Date.now() - Date.parse(last) < 30 * 86400000) return '';
+  if (!live('recipes').length && !choresAll().length) return '';
+  return `<div class="card"><div class="ic">${ic('box')}</div><div><b>Save a backup</b><small>${last ? `Last one ${new Date(last).toLocaleDateString()}` : 'No backup yet'}. One file with your recipes, chores, and lists.</small></div><button class="mini press go" data-act="backup">Back up</button></div>`;
+}
+
 function headsUp(td) {
-  const rows = [thawCard(td), shopCard(), planNextCard(td), resetCard()].filter(Boolean);
-  return rows.length ? `${sec('Heads up', rows.length)}<div class="list heads rise d1">${rows.join('')}</div>` : '';
+  // Most urgent first; only three show until you ask for the rest (fewer choices, less noise).
+  const rows = [thawCard(td), rateRow(td), leftoverRows(), shopCard(), planNextCard(td), recapRow(td), resetCard(), backupRow()].filter(Boolean)
+    .flatMap((h) => h.split(/(?=<(?:div|a|button) class="card)/).filter((x) => x.trim()));
+  if (!rows.length) return '';
+  const shown = ui.allHeads ? rows : rows.slice(0, 3), more = rows.length - shown.length;
+  return `${sec('Heads up', rows.length)}<div class="list heads rise d1">${shown.join('')}</div>${more ? `<button class="clear press moreh" data-act="moreheads">Show ${more} more</button>` : ui.allHeads && rows.length > 3 ? `<button class="clear press moreh" data-act="moreheads">Show less</button>` : ''}`;
 }
 
 function homeView() {
@@ -1432,6 +1550,7 @@ function homeView() {
     ${setup}
     ${shiftHero(td, !mine())}
     ${todoHtml(td)}
+    ${tomorrowHtml(td)}
     ${headsUp(td)}
     ${sec('Today')}${tlHtml(td, true)}
     <div class="tiles2 rise d2">${todayCards(td)}</div>
@@ -1451,6 +1570,7 @@ function calendarView() {
     const dt = new Date(S.parse(d));
     const dn = dt.toLocaleDateString(undefined, { weekday: 'short', timeZone: 'UTC' }), dd = dt.toLocaleDateString(undefined, { month: 'short', day: 'numeric', timeZone: 'UTC' });
     const evs = [...eventsOn(d).map((e) => ({ k: e.all_day ? '00:00' : hhmmOf(e.starts_at), t: e.all_day ? 'All day' : timeOf(e.starts_at), w: e.kind === 'meeting' ? 'Work meeting' : e.title || 'Busy', es: e.kind === 'event_shift' })),
+      ...routinesOn(d).map((r) => ({ k: hm(r.start_time), t: clock(r.start_time), w: `${r.title} (${routineWho(r)})` })),
       ...apptsOn(d).map((a) => ({ k: hhmmOf(a.starts_at), t: timeOf(a.starts_at), w: a.title, quiet: quietForMe(a), tag: quietForMe(a) ? 'At work' : !mine() && atWork(a) ? `${ownerName()}’s working` : '' }))].sort((a, b) => a.k.localeCompare(b.k));
     const pc = st.postCall && st.type !== 'post_call' ? `<span class="sc sleep">Post call until ${timeOf(st.postCall.until)}</span>` : '';
     const list = ui.calTab === 'month' ? (evs.length ? `<div class="el">${evs.slice(0, 2).map((e) => `<b>${esc(e.t)}</b>${esc(e.w)}`).join('<br>')}${evs.length > 2 ? `<br>+${evs.length - 2} more` : ''}</div>` : '')
@@ -1500,11 +1620,38 @@ function kidsView() {
       <div class="row when2"><input class="dt" name="when" type="datetime-local" aria-label="When"></div>
     </form>
     ${upcoming.length ? `${sec('Appointments', upcoming.length)}<div class="list">${upcoming.map(apptRow).join('')}</div>` : `<p class="empty">No appointments coming up.</p>`}
+    ${sec('Every week', live('routines').length || '')}
+    ${live('routines').length ? `<div class="list">${live('routines').sort((a, b) => a.title.localeCompare(b.title)).map((r) => { const br = R.breakOn(r, today), nb = R.nextBreak(r, today); return `<div class="it"><button class="nm" data-act="rtitem" data-id="${r.id}">${esc(r.title)}<span class="when">${esc(R.daysLabel(r.weekdays))} · ${esc(span(r.start_time, r.end_time))} · ${esc(routineWho(r))}</span>${br ? `<span class="when">On break until ${esc(shortDay(br.to, { month: 'short', day: 'numeric' }))}</span>` : nb ? `<span class="when">Next break ${esc(shortDay(nb.from, { month: 'short', day: 'numeric' }))}</span>` : ''}</button></div>`; }).join('')}</div>` : ''}
+    <button class="more press" data-act="rtnew">${ic('plus')}Add something weekly (preschool, a class…)</button>
     ${sec('Supplies', lowN ? `${lowN} low or out` : '')}
     <form class="qa slim" data-form="ksup" autocomplete="off" style="margin:0 0 8px"><div class="row"><input class="fld" name="name" type="text" placeholder="Add a supply (diapers, wipes…)" maxlength="120" enterkeyhint="done" aria-label="Supply"><button class="add press" type="submit" aria-label="Add">${ic('plus')}</button></div></form>
     ${supplies.length ? `<div class="list">${supplies.map(supRow).join('')}</div>` : ''}
   </main>
   ${dock('home')}`;
+}
+
+function routineSheet(r) {
+  if (!r || r.deleted_at) return '';
+  const days = r.weekdays || [], who = !r.who ? 'kids' : r.who;
+  const whoOpts = [['kids', 'Kids'], [myId(), myName() || 'Me'], ...(partnerId() ? [[partnerId(), userName(partnerId())]] : []), ['family', 'Family']];
+  const today = todayStr();
+  return `<h2><input class="ttl" data-rtf="title" data-id="${r.id}" value="${esc(r.title)}" maxlength="80" aria-label="Name" enterkeyhint="done"><button class="lnk" data-act="close">Done</button></h2>
+    <div class="scroll">
+      <div class="list frm">
+        <div class="frow">For<span class="seg sm">${whoOpts.map(([v, l]) => `<button class="${who === v ? 'on' : ''}" data-act="rtwho" data-id="${r.id}" data-v="${v}">${esc(l)}</button>`).join('')}</span></div>
+        <div class="frow">Time<span class="pair"><input type="time" class="dt sm" data-rtf="start_time" data-id="${r.id}" value="${hm(r.start_time)}" aria-label="Starts"><span class="evl">to</span><input type="time" class="dt sm" data-rtf="end_time" data-id="${r.id}" value="${hm(r.end_time)}" aria-label="Ends"></span></div>
+      </div>
+      ${sec('Days')}
+      <div class="months days7">${['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((d, i) => `<button class="press${days.includes(i) ? ' on' : ''}" data-act="rtday" data-id="${r.id}" data-d="${i}" aria-pressed="${days.includes(i)}">${d}</button>`).join('')}</div>
+      ${sec('Breaks', 'Holidays, summer')}
+      ${(r.breaks || []).length ? `<div class="list">${r.breaks.map((b, i) => `<div class="it"><span class="nm">${esc(b.label || 'Break')}<span class="when">${esc(shortDay(b.from, { month: 'short', day: 'numeric' }))} – ${esc(shortDay(b.to, { month: 'short', day: 'numeric', year: 'numeric' }))}${b.to < today ? ' · over' : ''}</span></span><button class="plus press" data-act="rtbrkdel" data-id="${r.id}" data-i="${i}" aria-label="Remove break">${ic('x')}</button></div>`).join('')}</div>` : '<p class="hint">No breaks yet. Add the dates it doesn’t happen, like winter break or summer.</p>'}
+      <form class="brk" data-form="rtbrk" data-id="${r.id}" autocomplete="off">
+        <input class="in" name="label" type="text" placeholder="Break name (Winter break)" maxlength="40">
+        <div class="pair2"><label>From<input class="dt" name="from" type="date" required></label><label>To<input class="dt" name="to" type="date" required></label></div>
+        <button class="ghost press" type="submit">${ic('plus')}Add break</button>
+      </form>
+      <button class="ghost press" data-act="rtdel" data-id="${r.id}" style="margin-top:14px">Delete</button>
+    </div>`;
 }
 
 function kidSheet(k) {
@@ -1532,6 +1679,16 @@ function calButtons(k) {
   const g = (cls) => `<a class="${cls} press" target="_blank" rel="noopener" href="${gcalLink(k)}">${ic('cal')}Google Calendar</a>`;
   const a = (cls) => `<button class="${cls} press" data-act="ics" data-id="${k.id}">${ic('cal')}Apple Calendar</button>`;
   return calApp() === 'apple' ? a('pri') + g('ghost') : g('pri') + a('ghost');
+}
+// Backup: one file with everything this phone has (no calendar links or passwords are stored here).
+function downloadBackup() {
+  const data = { app: 'home', version: VERSION, saved_at: new Date().toISOString(), profiles: state.profiles, ...Object.fromEntries(TABLES.filter((t) => t !== 'calendar_sync').map((t) => [t, state.rows[t]])) };
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([JSON.stringify(data, null, 1)], { type: 'application/json' }));
+  a.download = `home-backup-${todayStr()}.json`;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+  ls.set(K.backup, new Date().toISOString());
 }
 const icsStamp = (iso) => new Date(iso).toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '');
 function gcalLink(k) {
@@ -1624,10 +1781,11 @@ function sheetView() {
   else if (s.type === 'ai') body = aiSheet();
   else if (s.type === 'paste') body = pasteSheet();
   else if (s.type === 'planpaste') body = planPasteSheet();
+  else if (s.type === 'routine') body = routineSheet(findRow('routines', s.id));
   else if (s.type === 'plan') body = planSheet();
   else if (s.type === 'addcal') { const k = findRow('kid_items', s.id); body = k && k.starts_at ? `<h2>${esc(k.title)}</h2><div class="list opts"><a class="opt press" target="_blank" rel="noopener" href="${gcalLink(k)}">Google Calendar${ic('chev')}</a><button class="opt press" data-act="ics" data-id="${k.id}">Apple Calendar, with a 1 hour alert${ic('chev')}</button></div><p class="hint">To skip this step, pick your calendar in Settings.</p>` : ''; }
   if (!body) { ui.sheet = null; return ''; }
-  return `<div class="scrim" data-act="close"></div><div class="bs${['addfrom', 'chore', 'meal', 'recipe', 'ingr', 'ai', 'paste', 'planpaste', 'plan'].includes(s.type) ? '' : ' short'}" role="dialog" aria-modal="true">
+  return `<div class="scrim" data-act="close"></div><div class="bs${['addfrom', 'chore', 'meal', 'recipe', 'ingr', 'ai', 'paste', 'planpaste', 'plan', 'routine'].includes(s.type) ? '' : ' short'}" role="dialog" aria-modal="true">
     <div class="grab" data-act="close"></div>${body}</div>`;
 }
 
@@ -1736,6 +1894,7 @@ function settingsView() {
     <p class="gt">Lists</p>
     <div class="grp rise d1">
       <label class="fl press">Import Costco list<span class="v">${costco ? `${costco} items` : 'CSV file'}</span><input class="hide" type="file" accept=".csv,text/csv" data-act="costcocsv"></label>
+      <button class="fl press" data-act="backup">Back up everything<span class="v">${ls.get(K.backup, null) ? new Date(ls.get(K.backup, null)).toLocaleDateString() : 'Never'}</span></button>
       <label class="fl press">Import chores<span class="v">${choresAll().length ? `${choresAll().length} chores` : 'CSV file'}</span><input class="hide" type="file" accept=".csv,text/csv" data-act="chorescsv"></label>
     </div>
     <button class="ghost press rise d2" data-act="signout">Sign out</button>
@@ -1876,6 +2035,15 @@ $app.addEventListener('submit', async (e) => {
     render({ soft: true, keepFocus: `[data-form="${kind}"] .fld`, fx: [[`.it:has([data-id="${k.id}"])`, 'pop']] });
     return;
   }
+  if (kind === 'rtbrk') {
+    const r = findRow('routines', f.dataset.id); if (!r) return;
+    let from = f.from.value, to = f.to.value;
+    if (!from || !to) return;
+    if (to < from) [from, to] = [to, from];
+    updateRow('routines', r.id, { breaks: [...(r.breaks || []), { from, to, label: f.label.value.trim().slice(0, 40) || 'Break' }].sort((a, b) => a.from.localeCompare(b.from)) });
+    render({ soft: true, keepFocus: '__none' });
+    return;
+  }
   if (kind === 'cheeradd') {
     const text = f.name.value.trim().slice(0, 200);
     if (!text || !partnerId()) return;
@@ -1974,7 +2142,8 @@ $app.addEventListener('click', (e) => {
       return;
     // grocery
     case 'gcheck': { const was = groceryOpen().length; toggleGrocery(id); if (was > 0 && !groceryOpen().length) setTimeout(() => cheer('grocery', true), 300); return soft([[`[data-act="gcheck"][data-id="${id}"]`, 'jelly']]); }
-    case 'gclear': groceryDone().forEach((g) => removeRow('grocery_items', g.id)); return soft();
+    case 'gstorepick': ui.gstore = t.dataset.v; ls.set(K.gstore, ui.gstore); return soft();
+    case 'gclear': { const gone = groceryDone().map((g) => ({ ...g })); gone.forEach((g) => removeRow('grocery_items', g.id)); offerUndo(`Cleared ${plural(gone.length, 'item')}`, () => gone.forEach((g) => restoreRow('grocery_items', g))); return soft(); }
     case 'gitem': ui.sheet = { type: 'gitem', id }; return soft();
     case 'gstore': {
       const g = findRow('grocery_items', id), store = t.dataset.store || null;
@@ -1982,7 +2151,7 @@ $app.addEventListener('click', (e) => {
       if (g && store) { state.storeMemory[norm(g.name)] = store; ls.set(K.stores, state.storeMemory); } // next time it goes straight there
       ui.sheet = null; return soft();
     }
-    case 'gdel': removeRow('grocery_items', id); ui.sheet = null; return soft();
+    case 'gdel': { const g = { ...findRow('grocery_items', id) }; removeRow('grocery_items', id); offerUndo(`Removed ${g.name}`, () => restoreRow('grocery_items', g)); ui.sheet = null; return soft(); }
     // add-from sheet
     case 'addfrom': ui.sheet = { type: 'addfrom', tab: t.dataset.tab }; ui.newGroup = null; return soft();
     case 'edit': ui.edit = !ui.edit; return soft();
@@ -2005,7 +2174,7 @@ $app.addEventListener('click', (e) => {
     }
     case 'pitem': ui.sheet = { type: 'pitem', id }; return soft();
     case 'ploc': updateRow('pantry_items', id, { location: t.dataset.loc }); ui.sheet = null; return soft();
-    case 'pdel': removeRow('pantry_items', id); ui.sheet = null; return soft();
+    case 'pdel': { const p = { ...findRow('pantry_items', id) }; removeRow('pantry_items', id); offerUndo(`Removed ${p.name}`, () => restoreRow('pantry_items', p)); ui.sheet = null; return soft(); }
     // meals and recipes
     case 'ktab': ui.ktab = t.dataset.v; ls.set(K.ktab, ui.ktab); return soft();
     case 'wk': ui.week = +t.dataset.v === 0 ? 0 : ui.week + +t.dataset.v; return soft();
@@ -2015,7 +2184,7 @@ $app.addEventListener('click', (e) => {
       setMeal(slot, { recipe_id: id });
       ui.sheet = null; return soft([[`[data-slot="${slot}"]`, 'pop']]);
     }
-    case 'mclear': { setMeal(t.dataset.slot, {}); ui.sheet = null; return soft(); }
+    case 'mclear': { const m = { ...(findRow('meal_plan', t.dataset.slot) || {}) }; setMeal(t.dataset.slot, {}); offerUndo(`Cleared ${mealTitle(m) || 'meal'}`, () => setMeal(m.slot, { recipe_id: m.recipe_id, text: m.text })); ui.sheet = null; return soft(); }
     case 'rfav': { const r = findRow('recipes', id); if (r) updateRow('recipes', id, { favorite: !r.favorite }); return soft([[`[data-act="rfav"][data-id="${id}"]`, 'jelly']]); }
     case 'rmethod': { const r = findRow('recipes', id); if (r) updateRow('recipes', id, { method: r.method === t.dataset.k ? null : t.dataset.k }); return soft([[`[data-act="rmethod"][data-k="${t.dataset.k}"]`, 'jelly']]); }
     case 'rtag': { const r = findRow('recipes', id); if (r) updateRow('recipes', id, { [t.dataset.k]: !r[t.dataset.k] }); return soft(); }
@@ -2076,7 +2245,9 @@ $app.addEventListener('click', (e) => {
     case 'wkclear': {
       const ms = clearable();
       if (!ms.length || !confirm(`Clear ${plural(ms.length, 'planned meal')} for ${weekRange(weekDays())}? Recipes stay saved.`)) return;
+      const was = ms.map((m) => ({ ...m }));
       ms.forEach((m) => setMeal(m.slot, {}));
+      offerUndo(`Cleared ${plural(was.length, 'meal')}`, () => was.forEach((m) => setMeal(m.slot, { recipe_id: m.recipe_id, text: m.text })));
       return soft();
     }
     case 'planopen': ui.planErr = null; ui.sheet = { type: 'planpaste' }; render({ soft: true, keepFocus: '#planbox' }); return;
@@ -2112,17 +2283,21 @@ $app.addEventListener('click', (e) => {
       if (a === 'cdone' && t.classList.contains('cb')) {
         // Check, squish, then the row moves on to its next date.
         t.classList.add('on', 'jelly'); t.innerHTML = ic('check');
-        setTimeout(() => { closeChore(c, 'done'); soft(); cheerAfterDone('chore'); }, matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 380);
+        const prev = { due_date: c.due_date, done_at: c.done_at || null };
+        setTimeout(() => { const ev = closeChore(c, 'done'); soft(); offerUndo(`Done: ${c.title}`, () => undoClose(c, prev, ev)); cheerAfterDone('chore'); }, matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 380);
         return;
       }
-      closeChore(c, a === 'cdone' ? 'done' : 'skip'); return soft(ui.sheet ? [['.bs .hint', 'pop']] : null);
+      const prev = { due_date: c.due_date, done_at: c.done_at || null }, ev = closeChore(c, a === 'cdone' ? 'done' : 'skip');
+      offerUndo(`${a === 'cdone' ? 'Done' : 'Skipped'}: ${c.title}`, () => undoClose(c, prev, ev));
+      return soft(ui.sheet ? [['.bs .hint', 'pop']] : null);
     }
     case 'cdonehero': {
       const c = findRow('tasks', id); if (!c || t.classList.contains('ld')) return;
       t.classList.add('ld');
       const still = matchMedia('(prefers-reduced-motion: reduce)').matches;
       setTimeout(() => t.classList.add('ok'), still ? 0 : 280);
-      setTimeout(() => { closeChore(c, 'done'); soft(); cheerAfterDone('chore'); }, still ? 0 : 820);
+      const prev = { due_date: c.due_date, done_at: c.done_at || null };
+      setTimeout(() => { const ev = closeChore(c, 'done'); soft(); offerUndo(`Done: ${c.title}`, () => undoClose(c, prev, ev)); cheerAfterDone('chore'); }, still ? 0 : 820);
       return;
     }
     case 'cnew': { const c = newChore(); ui.sheet = { type: 'chore', id: c.id }; render({ soft: true, keepFocus: '.bs .ttl' }); $app.querySelector('.bs .ttl')?.select(); return; }
@@ -2154,21 +2329,42 @@ $app.addEventListener('click', (e) => {
     case 'tdone': {
       const x = findRow('tasks', id); if (!x) return;
       if (x.done_at) updateRow('tasks', id, { done_at: null });
-      else { recordEvent(x, 'done', x.due_date || todayStr()); updateRow('tasks', id, { done_at: new Date().toISOString() }); setTimeout(() => cheerAfterDone('task'), 250); }
+      else { const ev = recordEvent(x, 'done', x.due_date || todayStr()); updateRow('tasks', id, { done_at: new Date().toISOString() }); offerUndo(`Done: ${x.title}`, () => undoClose(x, { done_at: null }, ev)); setTimeout(() => cheerAfterDone('task'), 250); }
       return soft([[`[data-act="tdone"][data-id="${id}"]`, 'jelly']]);
     }
     case 'titem': ui.sheet = { type: 'task', id }; return soft();
     case 'tflag': { const x = findRow('tasks', id); if (x) updateRow('tasks', id, { priority: !x.priority }); return soft([[`.flag[data-id="${id}"]`, 'jelly']]); }
     case 'tshowdone': ui.showDone = !ui.showDone; return soft();
-    case 'tdel': removeRow('tasks', id); ui.sheet = null; return soft();
+    case 'tdel': { const x = { ...findRow('tasks', id) }; removeRow('tasks', id); offerUndo(`Deleted ${x.title}`, () => restoreRow('tasks', x)); ui.sheet = null; return soft(); }
     // today + calendar
     case 'napnow': { const n = nowHM(); saveKeyed('day_overrides', t.dataset.date, { nap_start: n, nap_end: addMin(n, +daySet().nap_minutes || 120) }); return soft([['.tl .r.now', 'pop']]); }
     case 'napup': saveKeyed('day_overrides', t.dataset.date, { nap_end: nowHM() }); return soft();
     case 'napedit': ui.sheet = { type: 'nap', date: t.dataset.date }; return soft();
     case 'napset': { const v = t.dataset.t; saveKeyed('day_overrides', t.dataset.date, { nap_start: v, nap_end: addMin(v, +daySet().nap_minutes || 120) }); ui.sheet = null; return soft(); }
     case 'napclear': saveKeyed('day_overrides', t.dataset.date, { nap_start: null, nap_end: null }); ui.sheet = null; return soft();
-    case 'cheerdel': removeRow('cheers', id); return soft();
+    case 'cheerdel': { const n = { ...findRow('cheers', id) }; removeRow('cheers', id); offerUndo('Note removed', () => restoreRow('cheers', n)); return soft(); }
     case 'cheertry': cheer('chore', true); return;
+    case 'rate': {
+      const m = findRow('meal_plan', t.dataset.slot); if (!m) return;
+      const v = t.dataset.v;
+      saveKeyed('meal_plan', m.slot, { date: m.date, meal: m.meal, rating: v });
+      if (m.recipe_id && v === 'loved') updateRow('recipes', m.recipe_id, { favorite: true, never_again: false });
+      if (m.recipe_id && v === 'never') updateRow('recipes', m.recipe_id, { never_again: true, favorite: false });
+      offerUndo(v === 'loved' ? 'Starred it' : v === 'never' ? 'Won’t suggest it again' : 'Thanks', () => { saveKeyed('meal_plan', m.slot, { date: m.date, meal: m.meal, rating: null }); });
+      return soft();
+    }
+    case 'lodone': { const p = { ...findRow('pantry_items', id) }; removeRow('pantry_items', id); offerUndo(t.dataset.v === 'ate' ? `Ate the ${p.name.toLowerCase()}` : `Tossed the ${p.name.toLowerCase()}`, () => restoreRow('pantry_items', p)); return soft(); }
+    case 'leftover': {
+      const f = $app.querySelector('[data-form="padd"]'), typed = f ? f.name.value.trim() : '';
+      const td = todayStr(), m = mealOf(M.slotOf(td)) || mealOf(M.slotOf(S.addDays(td, -1)));
+      const name = (typed || (m ? mealTitle(m) : 'Leftovers')).slice(0, 70);
+      const row = insertRow('pantry_items', { name: /^leftover/i.test(name) ? name : `Leftover ${name.toLowerCase()}`, location: 'fridge', status: 'have', made_on: td });
+      ui.loc = 'fridge'; ls.set(K.loc, 'fridge');
+      return render({ soft: true, keepFocus: '__none', fx: [[`.it:has([data-id="${row.id}"])`, 'pop']] });
+    }
+    case 'moreheads': ui.allHeads = !ui.allHeads; return soft();
+    case 'recap': cheer('allDone', true, `This week you two did ${t.dataset.n} things together. That’s a team.`); return;
+    case 'backup': downloadBackup(); return soft([[`[data-act="backup"]`, 'jelly']]);
     case 'calowner': saveKeyed('day_settings', 1, { calendar_owner: t.dataset.v === 'me' ? myId() : partnerId() }); return soft();
     case 'union': { const d = t.dataset.date; saveKeyed('day_overrides', d, { union_day: !unionOn(d) }); return soft([['.hero.shift', 'pop']]); }
     case 'actopen': ui.sheet = { type: 'activation', date: t.dataset.date }; return soft();
@@ -2185,10 +2381,16 @@ $app.addEventListener('click', (e) => {
     }
     // kids
     case 'ktaker': { const k = findRow('kid_items', id); if (k) updateRow('kid_items', id, { taker: takerOf(k) === t.dataset.v && k.taker ? null : t.dataset.v }); return soft(); }
+    case 'rtnew': { const r = insertRow('routines', { title: 'New weekly thing', who: 'kids', weekdays: [], start_time: '09:00', end_time: '10:00', breaks: [] }); ui.sheet = { type: 'routine', id: r.id }; render({ soft: true, keepFocus: '.bs .ttl' }); $app.querySelector('.bs .ttl')?.select(); return; }
+    case 'rtitem': ui.sheet = { type: 'routine', id }; return soft();
+    case 'rtwho': updateRow('routines', id, { who: t.dataset.v }); return soft();
+    case 'rtday': { const r = findRow('routines', id); if (!r) return; const d = +t.dataset.d, w = r.weekdays || []; updateRow('routines', id, { weekdays: (w.includes(d) ? w.filter((x) => x !== d) : [...w, d]).sort((a, b) => a - b) }); return soft(); }
+    case 'rtbrkdel': { const r = findRow('routines', id); if (!r) return; const was = [...(r.breaks || [])]; updateRow('routines', id, { breaks: was.filter((_, i) => i !== +t.dataset.i) }); offerUndo('Break removed', () => updateRow('routines', id, { breaks: was })); return soft(); }
+    case 'rtdel': { const r = { ...findRow('routines', id) }; removeRow('routines', id); offerUndo(`Deleted ${r.title}`, () => restoreRow('routines', r)); ui.sheet = null; return soft(); }
     case 'kitem': ui.sheet = { type: 'kid', id }; return soft();
     case 'kstat': updateRow('kid_items', id, { status: t.dataset.s }); return soft([[`[data-act="kstat"][data-id="${id}"][data-s="${t.dataset.s}"]`, 'jelly']]);
     case 'ksend': { const k = findRow('kid_items', id); if (k) addGrocery(k.title); return soft([[`.it:has([data-id="${id}"]) .onlist`, 'pop']]); }
-    case 'kdel': removeRow('kid_items', id); ui.sheet = null; return soft();
+    case 'kdel': { const k = { ...findRow('kid_items', id) }; removeRow('kid_items', id); offerUndo(`Deleted ${k.title}`, () => restoreRow('kid_items', k)); ui.sheet = null; return soft(); }
     case 'calapp': if (t.dataset.v) ls.set(K.calapp, t.dataset.v); else ls.del(K.calapp); return soft([[`[data-act="calapp"][data-v="${t.dataset.v}"]`, 'jelly']]);
     case 'addcal': ui.sheet = { type: 'addcal', id }; return soft();
     case 'ics': { const k = findRow('kid_items', id); if (k && k.starts_at) downloadIcs(k); ui.sheet = null; return soft(); }
@@ -2218,6 +2420,13 @@ $app.addEventListener('change', (e) => {
     else if (ds.kf === 'starts_at') v = v ? new Date(v).toISOString() : null;
     else v = v.trim() || null;
     updateRow('kid_items', ds.id, { [ds.kf]: v });
+    return render({ soft: true, keepFocus: '__none' });
+  }
+  if (ds.rtf && ds.id) {
+    let v = e.target.value;
+    if (ds.rtf === 'title') { v = v.trim().slice(0, 80); if (!v) return render({ soft: true, keepFocus: '__none' }); }
+    else if (!v) return render({ soft: true, keepFocus: '__none' });
+    updateRow('routines', ds.id, { [ds.rtf]: v });
     return render({ soft: true, keepFocus: '__none' });
   }
   if (ds.rf && ds.id) {

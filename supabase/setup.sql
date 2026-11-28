@@ -424,6 +424,56 @@ begin
   end if;
 end $$;
 
+-- 11. Undo, dinner ratings, leftovers, weekly routines.
+-- Undo a check-off: history stays add-only except this one mark.
+alter table public.task_events add column if not exists undone_at timestamptz;
+grant update (undone_at) on public.task_events to authenticated;
+do $$ begin
+  if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'task_events' and policyname = 'members undo') then
+    create policy "members undo" on public.task_events for update to authenticated using (public.is_household_member()) with check (public.is_household_member());
+  end if;
+end $$;
+-- "How was dinner?" and meals we won't have again.
+alter table public.meal_plan add column if not exists rating text check (rating is null or rating in ('loved', 'fine', 'never'));
+alter table public.recipes add column if not exists never_again boolean not null default false;
+-- Leftovers: the day they were made.
+alter table public.pantry_items add column if not exists made_on date;
+-- Weekly routines (a class, a study group), with breaks: [{ "from": "2026-12-21", "to": "2027-01-04", "label": "Winter break" }].
+create table if not exists public.routines (
+  id          uuid primary key default gen_random_uuid(),
+  title       text not null check (char_length(btrim(title)) between 1 and 80),
+  who         text check (who is null or char_length(who) <= 40),   -- 'kids', 'family', or a user id
+  weekdays    int[] not null default '{}',                           -- 0 = Sunday
+  start_time  time not null default '09:00',
+  end_time    time not null default '10:00',
+  starts_on   date,
+  ends_on     date,
+  breaks      jsonb not null default '[]'::jsonb,
+  created_at  timestamptz not null default now(),
+  updated_at  timestamptz not null default now(),
+  deleted_at  timestamptz
+);
+do $$
+begin
+  alter table public.routines enable row level security;
+  create or replace trigger routines_touch before update on public.routines for each row execute function public.touch_updated_at();
+  if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'routines' and policyname = 'members read') then
+    create policy "members read" on public.routines for select to authenticated using (public.is_household_member());
+  end if;
+  if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'routines' and policyname = 'members add') then
+    create policy "members add" on public.routines for insert to authenticated with check (public.is_household_member());
+  end if;
+  if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'routines' and policyname = 'members edit') then
+    create policy "members edit" on public.routines for update to authenticated using (public.is_household_member()) with check (public.is_household_member());
+  end if;
+  revoke all on public.routines from anon;
+  grant select, insert, update on public.routines to authenticated;
+  if exists (select 1 from pg_publication where pubname = 'supabase_realtime')
+     and not exists (select 1 from pg_publication_tables where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = 'routines') then
+    alter publication supabase_realtime add table public.routines;
+  end if;
+end $$;
+
 -- 8. Calendar sync every 30 minutes (after deploying the calendar-sync function).
 --    Replace PROJECT-REF with your project's ref (the part before .supabase.co).
 --

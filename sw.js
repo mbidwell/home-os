@@ -1,12 +1,12 @@
 // Home OS service worker.
 // Bump VERSION every release. This worker only ever deletes caches it owns (homeos-*).
 // Other apps on this origin keep their own caches and storage untouched.
-const VERSION = 'homeos-shell-v28';
+const VERSION = 'homeos-shell-v30';
 const FONTS = 'homeos-fonts-v1';
 const OWN = [VERSION, FONTS];
 const SHELL = [
   './', 'index.html', 'config.js', 'manifest.webmanifest',
-  'css/app.css', 'js/boot.js', 'js/app.js', 'js/api.js', 'js/particles.js', 'js/realtime.js', 'js/schedule.js', 'js/day.js', 'js/meals.js', 'js/fit.js', 'js/cheer.js',
+  'css/app.css', 'js/boot.js', 'js/app.js', 'js/api.js', 'js/particles.js', 'js/realtime.js', 'js/schedule.js', 'js/day.js', 'js/meals.js', 'js/fit.js', 'js/cheer.js', 'js/aisles.js', 'js/routines.js',
   'icons/icon-192.png', 'icons/icon-512.png', 'icons/apple-touch-icon.png', 'icons/apple-touch-icon-blush.png', 'icons/apple-touch-icon-roast.png'
 ];
 
