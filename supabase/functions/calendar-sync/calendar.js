@@ -216,6 +216,7 @@ export function feedToRows(icsText, source, fromDate, toDate) {
       const row = classify(ev, source);
       if (!row) continue;
       row.uid = `${source}:${uid}${rule && !isOverride ? `:${ymdStr(y, m, d)}` : isOverride ? `:${ymdStr(ridV.y, ridV.m, ridV.d)}` : ''}`; // an edited instance keeps its series slot
+      row.source = source;
       row.all_day = st.allDay;
       if (st.allDay) {
         row.start_date = ymdStr(y, m, d);

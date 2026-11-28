@@ -309,6 +309,8 @@ alter table public.day_overrides enable row level security;
 alter table public.kid_items enable row level security;
 grant select on public.calendar_events, public.calendar_sync to authenticated;
 grant select, insert, update on public.day_settings, public.day_overrides, public.kid_items to authenticated;
+-- The calendar-sync function writes with the service role, which newer projects also don't grant by default.
+grant select, insert, update on public.calendar_events, public.calendar_sync to service_role;
 
 -- 7b. Toddler nap is a window (nap_start to nap_end, e.g. 1-4 PM) and a length; the actual nap is set per day.
 alter table public.day_settings add column if not exists nap_minutes int not null default 120 check (nap_minutes between 15 and 300);

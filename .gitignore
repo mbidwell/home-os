@@ -13,3 +13,4 @@ tools/.chrome-profile/
 
 # Local editor/agent config
 .claude/
+supabase/.temp/

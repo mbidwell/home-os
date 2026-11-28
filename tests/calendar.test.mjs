@@ -82,3 +82,10 @@ test('monthly by weekday (2nd Tuesday, last Friday)', () => {
   assert.deepEqual(r.filter((x) => x.title === 'Board').map((x) => x.start_date), ['2026-11-10', '2026-12-08']);
   assert.deepEqual(r.filter((x) => x.title === 'Payday').map((x) => x.start_date), ['2026-11-27', '2026-12-25']);
 });
+
+test('every row carries its source (the table requires it)', () => {
+  const g = rows(cal(['UID:s', 'SUMMARY:Main ED', 'DTSTART:20261127T120000Z', 'DTEND:20261128T000000Z', QG]));
+  const o = rows(cal(['UID:t', 'SUMMARY:Standup', 'DTSTART:20261127T150000Z', 'DTEND:20261127T153000Z']), 'outlook');
+  assert.equal(g[0].source, 'google');
+  assert.equal(o[0].source, 'outlook');
+});
