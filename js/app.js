@@ -4,8 +4,9 @@ import { startRealtime } from './realtime.js';
 import * as S from './schedule.js';
 import * as D from './day.js';
 import * as M from './meals.js';
+import * as F from './fit.js';
 
-const VERSION = '17';
+const VERSION = '19';
 const T = window.homeosTheme;
 const Q = new URLSearchParams(location.search);
 const PREVIEW = T.isPreview ? Q.get('preview') : null; // local screenshots only
@@ -95,7 +96,7 @@ if (PREVIEW) {
     ch('Wipe down the fridge', { every: 2, due_date: S.addDays(today, -2) }), filt,
     ch('Water the plants', { every: 3, unit: 'day', due_date: S.addDays(today, -1) }),
     ch('Take out recycling', { repeat_mode: 'fixed', every: 2, weekday: 2, assignee: 'p', due_date: S.addDays(today, 2) }),
-    ch('Clean the bathrooms', { due_date: S.addDays(today, 4) }), ch('Wash the bedding', { due_date: S.addDays(today, 5) }),
+    ch('Clean the bathrooms', { due_date: S.addDays(today, 2), assignee: 'me' }), ch('Wash the bedding', { due_date: S.addDays(today, 5) }),
     ch('Clean the gutters', { repeat_mode: 'fixed', every: 6, unit: 'month', week_of_month: 2, months: [4, 10], due_date: S.addDays(today, 60) }),
     ch('Test smoke alarms', { repeat_mode: 'fixed', every: 3, unit: 'month', week_of_month: 1, months: [3, 6, 9, 12], due_date: S.addDays(today, 25) }),
     { id: 't1', kind: 'task', title: 'Fix the squeaky door', category: 'House', priority: true, due_date: S.addDays(today, 2), active: true, repeat_mode: 'once' },
@@ -525,12 +526,6 @@ function dock(on) {
   return `<nav class="dockwrap" aria-label="Main"><div class="dock">${b('home', 'Today', 'home')}${b('grocery', 'Grocery', 'cart')}${b('kitchen', 'Kitchen', 'box')}${b('chores', 'Chores', 'chore')}${b('settings', 'Settings', 'set')}</div></nav>`;
 }
 
-function choreLine() {
-  const today = todayStr();
-  const act = choresAll().filter((c) => c.active && c.due_date);
-  const o = act.filter((c) => S.isOverdue(c, today)).length, d = act.filter((c) => c.due_date === today).length;
-  return [o && `${o} overdue`, d && `${d} due today`].filter(Boolean).join(', ');
-}
 function resetCard() {
   const today = todayStr();
   if (S.weekdayOf(today) !== 0) return '';
@@ -984,13 +979,33 @@ function newChore() {
   return insertRow('tasks', c);
 }
 
+// How full a day is, from the calendar owner's schedule.
+function loadOf(d) {
+  const st = statusOf(d);
+  if (['working', 'activated', 'post_call', 'union'].includes(st.type) || st.union || calRows().some((r) => r.kind === 'event_shift' && r.start_date === d)) return 'busy';
+  if (st.type === 'on_call') return 'light';
+  if (st.type === 'no_shift') return 'free';
+  return 'unknown'; // schedule not posted: don't send chores there
+}
+// A big chore of the calendar owner's (or an Either chore, on their phone) that's due on a busy day gets a better day.
+function fitFor(c, today = todayStr()) {
+  if (!calOwner() || !c.active || !c.due_date || F.sizeOf(c) !== 'big') return null;
+  if (!(c.assignee === calOwner() || (!c.assignee && calOwner() === myId()))) return null;
+  const due = S.shownDue(c, today), d = F.betterDay(due, today, F.slackFor(c), loadOf);
+  return d ? { date: d, why: loadOf(d) === 'free' ? 'day off' : 'on call', busy: chipText(statusOf(due)) } : null;
+}
+const dayShort = (d) => (d === todayStr() ? 'today' : d === S.addDays(todayStr(), 1) ? 'tomorrow' : shortDay(d, { weekday: 'long' }));
+const fitRow = (c, f) => `<div class="fitrow"><span>${esc(f.busy)} that day. Better ${esc(dayShort(f.date))} (${f.why}).</span><button class="mini press" data-act="cmove" data-id="${c.id}" data-date="${f.date}">Move</button></div>`;
+
 function choreRow(c, today) {
+  const fit = fitFor(c, today);
   const due = S.shownDue(c, today), late = S.isOverdue(c, today);
   const open = ui.howto === c.id && c.howto;
   return `<div class="it${late ? ' late' : ''}">${`<button class="cb press" data-act="cdone" data-id="${c.id}" role="checkbox" aria-checked="false" aria-label="Done: ${esc(c.title)}"></button>`}
     <button class="nm" data-act="citem" data-id="${c.id}">${esc(c.title)}<span class="meta"><b>${S.dueLabel(due, today)}</b> · ${esc(S.repeatLabel(c))}</span></button>
     ${c.howto ? `<button class="qbtn press" data-act="howto" data-id="${c.id}" aria-expanded="${!!open}" aria-label="How to">${ic('q')}</button>` : ''}
     <span class="who${whoKey(c) === 'me' ? ' me' : ''}" title="${esc(whoLine(c))}">${esc(whoInitial(c))}</span></div>
+    ${fit ? fitRow(c, fit) : ''}
     ${open ? `<div class="howto"><ol>${c.howto.split('\n').map((l) => l.trim()).filter(Boolean).map((l) => `<li>${esc(l.replace(/^\d+[.)]\s*/, ''))}</li>`).join('')}</ol></div>` : ''}`;
 }
 
@@ -1015,7 +1030,8 @@ function choresView() {
   const chip = (k, label) => `<button class="fchip press${ui.who === k ? ' on' : ''}" data-act="cwhof" data-v="${k}">${esc(label)}</button>`;
   const heroHtml = hero ? `<div class="stack rise" style="margin:12px 0 26px"><section class="hero chore">
       <p class="eyebrow">${S.isOverdue(hero.c, today) ? `Overdue · ${plural(-S.diffDays(hero.c.due_date, today), 'day')}` : 'Due today'}</p>
-      <h2>${esc(hero.c.title)}</h2><p>${esc(S.repeatLabel(hero.c))} · ${esc(whoLine(hero.c))}</p>
+      <h2>${esc(hero.c.title)}</h2><p>${esc(S.repeatLabel(hero.c))} · ${esc(whoLine(hero.c))}${F.sizeOf(hero.c) === 'big' ? ' · Big' : ''}</p>
+      ${fitFor(hero.c, today) ? `<p class="pcl">Busy day. Better ${esc(dayShort(fitFor(hero.c, today).date))} (${fitFor(hero.c, today).why}). <button class="lnk2 press" data-act="cmove" data-id="${hero.c.id}" data-date="${fitFor(hero.c, today).date}">Move it</button></p>` : ''}
       <div class="acts"><button class="pri press" data-act="cdonehero" data-id="${hero.c.id}">${ic('check')}Done</button><button class="skipb press" data-act="cskip" data-id="${hero.c.id}">Skip</button></div>
     </section></div>` : '';
   const sections = groups.filter(([, xs]) => xs.length).map(([label, xs]) => `${sec(label, xs.length)}<div class="list">${xs.map((x) => choreRow(x.c, today)).join('')}</div>`).join('');
@@ -1100,6 +1116,7 @@ function choreSheet(c) {
         <div class="frow">Repeats<span class="pair"><span class="evl">Every</span><input type="number" class="num" min="1" max="365" inputmode="numeric" data-field="every" data-id="${c.id}" value="${c.every || 1}" aria-label="Every">${sel('unit', [['day', c.every > 1 ? 'days' : 'day'], ['week', c.every > 1 ? 'weeks' : 'week'], ['month', c.every > 1 ? 'months' : 'month'], ['year', c.every > 1 ? 'years' : 'year']], c.unit)}</span></div>
         ${monthly ? `<div class="frow">Week of the month${sel('week_of_month', [['', 'Any'], ['1', 'Week 1'], ['2', 'Week 2'], ['3', 'Week 3'], ['4', 'Week 4']], c.week_of_month)}</div>` : ''}
         ${c.unit === 'week' || (monthly && c.week_of_month) ? `<div class="frow">Day${sel('weekday', [['', 'Any'], ...S.WEEKDAYS.map((d, i) => [String(i), d])], c.weekday)}</div>` : ''}
+        <div class="frow">Size${seg('csize', [['quick', 'Quick'], ['big', 'Big']], F.sizeOf(c))}</div>
         <div class="frow">Count from${seg('cmode', [['after', 'Last done'], ['fixed', 'Schedule']], c.repeat_mode === 'fixed' ? 'fixed' : 'after')}</div>
       </div>
       <p class="hint">${esc(S.repeatLabel(c))}. ${c.repeat_mode === 'fixed' ? 'Stays on the calendar even when it’s done late.' : 'The next one is counted from the day it’s done.'}</p>
@@ -1322,7 +1339,6 @@ function todayCards(today) {
   const nextAppt = kidsAll().filter((k) => k.kind === 'appointment' && k.starts_at && Date.parse(k.starts_at) > Date.now()).sort((a, b) => a.starts_at.localeCompare(b.starts_at))[0];
   const kidLine = [nextAppt && `${nextAppt.title} ${S.dueLabel(D.localDateOf(Date.parse(nextAppt.starts_at), TZ), today).toLowerCase()}`, kidsLow && `${kidsLow} supplies low`].filter(Boolean).join(' · ');
   cards.push(`<a class="card press rise d1" href="#/kids"><div class="ic">${ic('kid')}</div><div><b>Kids</b><small>${esc(kidLine || 'Appointments and supplies')}</small></div></a>`);
-  const cl = choreLine(); if (cl) cards.push(`<a class="card press rise d1" href="#/chores"><div class="ic">${ic('chore')}</div><div><b>Chores</b><small>${cl}</small></div></a>`);
   const toGet = groceryOpen().length; if (toGet) cards.push(`<a class="card press rise d2" href="#/grocery"><div class="ic">${ic('cart')}</div><div><b>Grocery</b><small>${plural(toGet, 'thing')} to get</small></div></a>`);
   const out = pantry().filter((x) => x.status === 'out').length, low = pantry().filter((x) => x.status === 'low').length;
   const kl = [out && `${out} out`, low && `${low} low`].filter(Boolean).join(', ');
@@ -1330,6 +1346,31 @@ function todayCards(today) {
   const nextShift = eventShifts().filter((e) => e.start_date >= today).pop();
   if (nextShift && mine()) cards.push(`<a class="card press rise d2" href="#/events"><div class="ic">${ic('cal')}</div><div><b>Event shifts</b><small>Next: ${esc(nextShift.title)} ${S.dueLabel(nextShift.start_date, today).toLowerCase()}</small></div></a>`);
   return cards.join('');
+}
+
+// To do today: chores and tasks due today or late, for me (and Either), with checkboxes right here.
+function todoToday(td) {
+  const mineOrEither = (c) => !c.assignee || c.assignee === myId();
+  const chores = choresAll().filter((c) => c.active && c.due_date && S.shownDue(c, td) <= td);
+  const tasks = tasksAll().filter((t) => !t.done_at && t.active !== false && ((t.due_date && t.due_date <= td) || (!t.due_date && t.priority)));
+  const mine = chores.filter(mineOrEither).sort((a, b) => S.shownDue(a, td).localeCompare(S.shownDue(b, td)) || a.title.localeCompare(b.title));
+  const theirs = chores.filter((c) => !mineOrEither(c)).length;
+  const myTasks = tasks.filter((t) => !t.assignee || t.assignee === myId()).sort((a, b) => (b.priority - a.priority) || String(a.due_date || '9').localeCompare(String(b.due_date || '9')));
+  const doneToday = live('task_events').filter((e) => e.kind === 'done' && e.by_user === myId() && D.localDateOf(Date.parse(e.at), TZ) === td).length;
+  return { mine, myTasks, theirs, doneToday };
+}
+function taskRowToday(t, td) {
+  return `<div class="it"><button class="cb press" data-act="tdone" data-id="${t.id}" role="checkbox" aria-checked="false" aria-label="Done: ${esc(t.title)}"></button>
+    <button class="nm" data-act="titem" data-id="${t.id}">${esc(t.title)}<span class="meta">${t.due_date ? (S.isOverdue(t, td) ? `<b>${S.dueLabel(t.due_date, td)}</b>` : 'Due today') : 'Flagged'} · Task</span></button>
+    <button class="flag press${t.priority ? ' on' : ''}" data-act="tflag" data-id="${t.id}" aria-pressed="${!!t.priority}" aria-label="Priority">${ic('flag')}</button></div>`;
+}
+function todoHtml(td) {
+  const { mine, myTasks, theirs, doneToday } = todoToday(td);
+  const n = mine.length + myTasks.length;
+  const pn = partnerId() ? userName(partnerId()) : 'your partner';
+  const foot = [doneToday && `${plural(doneToday, 'thing')} done today`, theirs && `${theirs} more for ${pn}`].filter(Boolean).join(' · ');
+  if (!n) return `${sec('To do today')}<div class="list todo rise d1"><p class="empty" style="margin:16px 4px">${doneToday ? `All done for today. ${plural(doneToday, 'thing')} checked off.` : 'Nothing due today.'}</p></div>${theirs ? `<p class="upd">${theirs} more for ${esc(pn)}</p>` : ''}`;
+  return `${sec('To do today', n)}<div class="list todo rise d1">${mine.map((c) => choreRow(c, td)).join('')}${myTasks.map((t) => taskRowToday(t, td)).join('')}</div>${foot ? `<p class="upd">${esc(foot)}</p>` : ''}`;
 }
 
 function homeView() {
@@ -1353,6 +1394,7 @@ function homeView() {
     ${shiftHero(td, !mine())}
     ${thawCard(td)}${shopCard()}${planNextCard(td)}
     ${resetCard()}
+    ${todoHtml(td)}
     ${sec('Today')}${tlHtml(td, true)}
     <div style="margin-top:14px">${todayCards(td)}</div>
     <a class="more press" href="#/calendar">${ic('cal')}Week and month</a>
@@ -2033,6 +2075,8 @@ $app.addEventListener('click', (e) => {
     }
     case 'cnew': { const c = newChore(); ui.sheet = { type: 'chore', id: c.id }; render({ soft: true, keepFocus: '.bs .ttl' }); $app.querySelector('.bs .ttl')?.select(); return; }
     case 'cwho': { const v = t.dataset.v; updateRow('tasks', id, { assignee: v === 'me' ? myId() : v === 'partner' ? partnerId() : null }); return soft(); }
+    case 'csize': updateRow('tasks', id, { effort: t.dataset.v }); return soft();
+    case 'cmove': { updateRow('tasks', id, { due_date: t.dataset.date }); return soft([[`.it:has([data-id="${id}"])`, 'pop']]); }
     case 'cmode': updateRow('tasks', id, { repeat_mode: t.dataset.v }); return soft();
     case 'cmonth': {
       const c = findRow('tasks', id); if (!c) return;

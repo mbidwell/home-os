@@ -361,6 +361,8 @@ alter table public.day_settings add column if not exists calendar_owner uuid;
 alter table public.kid_items add column if not exists taker text check (taker is null or char_length(taker) <= 40);
 -- Where a kid appointment is (typed in the app; goes to the calendar event and maps).
 alter table public.kid_items add column if not exists location text check (location is null or char_length(location) <= 200);
+-- Chore size: quick or big. Empty means guessed from the name. Big chores avoid busy work days.
+alter table public.tasks add column if not exists effort text check (effort is null or effort in ('quick', 'big'));
 
 -- Lunch planning is off until someone turns it on in Settings.
 alter table public.day_settings add column if not exists lunch_plan boolean not null default false;

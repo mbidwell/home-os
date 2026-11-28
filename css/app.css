@@ -492,3 +492,6 @@ button { background: none; border: 0; padding: 0; cursor: pointer; }
 a.cal { text-decoration: none; }
 .acts2 .ghost { display: flex; align-items: center; justify-content: center; gap: 6px; font-size: 15px; }
 .acts2 .ghost svg.i, .acts2 .pri svg.i { width: 18px; height: 18px; }
+.fitrow { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: -6px 0 8px 32px; font: 600 13px var(--f-body); color: var(--ink2); }
+.fitrow span { flex: 1; min-width: 0; }
+.lnk2 { font: inherit; font-weight: 700; color: inherit; text-decoration: underline; text-underline-offset: 2px; padding: 4px 0; }
