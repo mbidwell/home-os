@@ -60,6 +60,11 @@ end $$;
 revoke all on public.household_members from anon;
 revoke all on public.profiles from anon;
 
+-- Newer Supabase projects don't grant table access to signed-in users by default.
+-- RLS above still limits every row to household members.
+grant select on public.household_members to authenticated;
+grant select, insert, update on public.profiles to authenticated;
+
 -- 4. Add the two household users (do this by hand, never commit real IDs).
 --    Copy each user's ID from Authentication > Users, then run:
 --
