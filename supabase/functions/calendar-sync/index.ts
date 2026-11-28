@@ -45,7 +45,8 @@ async function syncFeed(source: string, url: string | undefined, from: string, t
 
     Object.assign(status, { last_ok_at: now, last_error: null, event_count: rows.length });
   } catch (e) {
-    status.last_error = String((e as Error).message || e).slice(0, 200);
+    // Network errors can quote the request URL, and the feed links are secrets: never store or return them.
+    status.last_error = String((e as Error).message || e).replace(/(?:webcals?|https?):\/\/\S+/gi, '[calendar link]').slice(0, 200);
   }
   await db.from('calendar_sync').upsert(status, { onConflict: 'source' });
   return status;

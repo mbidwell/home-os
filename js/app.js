@@ -9,7 +9,7 @@ import * as C from './cheer.js';
 import * as A from './aisles.js';
 import * as R from './routines.js';
 
-const VERSION = '23';
+const VERSION = '24';
 const T = window.homeosTheme;
 const Q = new URLSearchParams(location.search);
 const PREVIEW = T.isPreview ? Q.get('preview') : null; // local screenshots only
@@ -681,7 +681,7 @@ function addForMeal(slot) {
   if (!r || r.deleted_at) return 0;
   const have = pantry().filter((p) => p.status === 'have').map((p) => p.name);
   const need = M.missingFor(r.ingredients, have, groceryOpen().map((g) => g.name));
-  for (const x of need) addGrocery(x.name, { note: [x.qty, `for ${r.title}`].filter(Boolean).join(' · '), from_slot: slot });
+  for (const x of need) addGrocery(x.name, { note: [x.qty, `for ${r.title}`].filter(Boolean).join(' · ').slice(0, 120), from_slot: slot });
   return need.length;
 }
 function unplanGrocery(slot) { groceryOpen().filter((g) => g.from_slot === slot).forEach((g) => removeRow('grocery_items', g.id)); }
@@ -964,7 +964,7 @@ function planSheet() {
 function applyPlan() {
   const p = ui.plan;
   if (!p) return;
-  const made = p.recipes.filter((r) => r.on).map(({ on, ...r }) => insertRow('recipes', r));
+  const made = p.recipes.filter((r) => r.on).map(({ on, ...r }) => insertRow('recipes', fitRecipe(r)));
   for (const x of p.slots.filter((s2) => s2.on)) {
     const r = [...recipes(), ...made].find((y) => M.sameTitle(y.title, x.title));
     setMeal(M.slotOf(x.date, x.meal), { recipe_id: r ? r.id : null, text: r ? null : x.title });
@@ -977,6 +977,10 @@ function pasteSheet() {
     <div class="scroll"><textarea class="ta" id="pastebox" rows="12" placeholder="Lemon chicken&#10;Ingredients&#10;4 chicken thighs&#10;2 lemons&#10;Steps&#10;1. Heat the pan…"></textarea></div>
     <div class="foot2"><button class="pri press" data-act="pastesave">${ic('check')}Save recipe</button></div>`;
 }
+
+// Keep pasted recipes inside the database's size limits so a long one isn't turned away.
+const fitRecipe = (r) => ({ ...r, title: String(r.title || 'New recipe').slice(0, 120), ingredients: r.ingredients ? r.ingredients.slice(0, 8000) : null,
+  steps: r.steps ? r.steps.slice(0, 12000) : null, notes: r.notes ? r.notes.slice(0, 2000) : null, source_url: r.source_url ? r.source_url.slice(0, 500) : null });
 
 async function copyPrompt(btn) {
   const text = aiPrompt();
@@ -1000,6 +1004,9 @@ const taskLists = () => [...new Set([...TASK_LISTS, ...tasksAll().map((t) => t.c
 const eventsOf = (id) => live('task_events').filter((e) => e.task_id === id && !e.undone_at).sort((a, b) => String(b.at).localeCompare(String(a.at)));
 
 function recordEvent(t, kind, due) {
+  // Done again after an Undo: the database keeps one entry per instance, so bring the undone one back.
+  const undone = state.rows.task_events.find((e) => e.task_id === t.id && e.kind === kind && e.due_date === due && e.undone_at);
+  if (undone) { updateRow('task_events', undone.id, { undone_at: null }); return undone; }
   return insertRow('task_events', { task_id: t.id, kind, due_date: due, at: new Date().toISOString(), by_user: myId() }, { conflict: 'task_id,kind,due_date' });
 }
 
@@ -2238,7 +2245,7 @@ $app.addEventListener('click', (e) => {
     case 'pastesave': {
       const box = $app.querySelector('#pastebox'), text = box ? box.value : '';
       if (!text.trim()) { box?.focus(); return; }
-      const r = insertRow('recipes', M.parsePasted(text));
+      const r = insertRow('recipes', fitRecipe(M.parsePasted(text)));
       ui.sheet = { type: 'recipe', id: r.id }; return soft();
     }
     case 'gear': { const v = t.dataset.v, g = gear(); saveKeyed('day_settings', 1, { appliances: g.includes(v) ? g.filter((x) => x !== v) : [...g, v] }); return soft([[`[data-act="gear"][data-v="${v}"]`, 'jelly']]); }
@@ -2433,7 +2440,7 @@ $app.addEventListener('change', (e) => {
     let v = e.target.value;
     if (ds.rf === 'title') { v = v.trim().slice(0, 120); if (!v) return render({ soft: true, keepFocus: '__none' }); }
     else if (ds.rf === 'source_url') { v = v.trim().slice(0, 500); if (v && !/^https?:\/\//i.test(v)) v = `https://${v}`; v = v || null; }
-    else v = v.replace(/\s+$/, '') || null;
+    else v = (v.replace(/\s+$/, '') || null) && v.replace(/\s+$/, '').slice(0, { ingredients: 8000, steps: 12000, notes: 2000 }[ds.rf] || 2000);
     updateRow('recipes', ds.id, { [ds.rf]: v });
     return render({ soft: true, keepFocus: '__none' });
   }
