@@ -19,6 +19,13 @@ This repo is a template: it holds no names, addresses, chores, or calendar data.
 
 9. **Chores (optional).** Settings > Lists > Import chores, with a CSV of columns `name, group, repeat_mode (fixed | after_completion | once), every, unit (day | week | month | year), week_of_month (1-4), months (Mar;Jun), day (Tue), owner (Me | Either), active (yes | no), notes, howto, start_date`. "Me" means whoever imports. Rows with `once` become priority tasks. Keep the CSV out of the repo.
 
+10. **Calendar (optional).** The `calendar-sync` Edge Function reads two private calendar links and stores filtered events (never descriptions, attendees, locations, or meeting links).
+    - Find the links. Google: Calendar settings > your calendar > Integrate calendar > **Secret address in iCal format**. Outlook: Settings > Calendar > Shared calendars > **Publish a calendar** > ICS link.
+    - Add them as Edge Function secrets in Supabase (Edge Functions > Secrets): `GOOGLE_ICS_URL` and `OUTLOOK_ICS_URL`. Never put them in this repo.
+    - Deploy: `supabase functions deploy calendar-sync --project-ref <your-ref> --no-verify-jwt --use-api` (it's triggered by cron and by the app; it returns no calendar data).
+    - Schedule every 30 minutes with the commented SQL in `setup.sql` section 8.
+    - Rules: QGenda entries (description contains "AutoSync from QGenda") with "call" in the title are On call; "Off" is not a shift; other timed ones are Working. "Event Physician" entries are listed under Event shifts. Overnight shifts and overnight activations make the next morning Post call (hours set in Settings).
+
 ## Notes
 
 - Theme is stored per phone. Night Shift dims to amber from 10 PM to 6 AM (toggle in Settings).

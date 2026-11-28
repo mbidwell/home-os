@@ -2,17 +2,28 @@ import * as api from './api.js';
 import { startParticles } from './particles.js';
 import { startRealtime } from './realtime.js';
 import * as S from './schedule.js';
+import * as D from './day.js';
 
-const VERSION = '3';
+const VERSION = '4';
 const T = window.homeosTheme;
 const Q = new URLSearchParams(location.search);
 const PREVIEW = T.isPreview ? Q.get('preview') : null; // local screenshots only
 const $app = document.getElementById('app');
 const K = { profiles: 'homeos-profiles', queue: 'homeos-queue', rows: 'homeos-rows', loc: 'homeos-kitchen-loc', later: 'homeos-partner-later', stores: 'homeos-store-memory', choreTab: 'homeos-chore-tab', lists: 'homeos-task-lists', who: 'homeos-chore-who', debug: 'homeos-debug' };
-const TABLES = ['grocery_items', 'staples', 'pantry_items', 'tasks', 'task_events'];
+const TABLES = ['grocery_items', 'staples', 'pantry_items', 'tasks', 'task_events',
+  'calendar_events', 'calendar_sync', 'day_settings', 'day_overrides', 'kid_items'];
+// Tables keyed by something other than id.
+const PK = { calendar_events: 'uid', calendar_sync: 'source', day_settings: 'id', day_overrides: 'date' };
+const pkOf = (t) => PK[t] || 'id';
+// Newer tables: if one isn't set up yet, keep going without it instead of failing the whole sync.
+const OPTIONAL = new Set(['calendar_events', 'calendar_sync', 'day_settings', 'day_overrides', 'kid_items']);
 // What each table pulls. History (task_events) is add-only: the most recent stretch is enough on a phone.
 const TABLE_Q = {
-  task_events: 'task_events?select=*&order=at.desc&limit=800'
+  task_events: 'task_events?select=*&order=at.desc&limit=800',
+  calendar_events: 'calendar_events?select=uid,kind,title,shift_type,site,all_day,start_date,end_date,starts_at,ends_at&removed_at=is.null&order=start_date.asc&limit=3000',
+  calendar_sync: 'calendar_sync?select=*',
+  day_settings: 'day_settings?select=*',
+  day_overrides: 'day_overrides?select=*&order=date.desc&limit=120'
 };
 const tableQuery = (t) => TABLE_Q[t] || `${t}?select=*&deleted_at=is.null&order=created_at.asc`;
 
@@ -22,7 +33,7 @@ const ls = {
   del(k) { try { localStorage.removeItem(k); } catch {} }
 };
 
-const emptyRows = () => ({ grocery_items: [], staples: [], pantry_items: [], tasks: [], task_events: [] });
+const emptyRows = () => ({ grocery_items: [], staples: [], pantry_items: [], tasks: [], task_events: [], calendar_events: [], calendar_sync: [], day_settings: [], day_overrides: [], kid_items: [] });
 const state = {
   profiles: ls.get(K.profiles, []),
   rows: { ...emptyRows(), ...ls.get(K.rows, {}) },
@@ -36,7 +47,7 @@ const state = {
   error: null
 };
 // Screen-only state (not synced).
-const ui = { sheet: null, edit: false, newGroup: null, loc: ls.get(K.loc, 'fridge'), choreTab: ls.get(K.choreTab, 'chores'), who: ls.get(K.who, 'all'), showLater: false, showDone: false, howto: null, taskCat: 'House', resetCount: null };
+const ui = { sheet: null, edit: false, newGroup: null, loc: ls.get(K.loc, 'fridge'), choreTab: ls.get(K.choreTab, 'chores'), who: ls.get(K.who, 'all'), showLater: false, showDone: false, howto: null, taskCat: 'House', resetCount: null, calTab: 'week' };
 
 /* ---------- constants ---------- */
 const STORES = [['costco', 'Costco'], ['wegmans', 'Wegmans'], ['publix', 'Publix'], ['harris_teeter', 'Harris Teeter']];
@@ -58,6 +69,7 @@ if (PREVIEW) {
   const now = new Date().toISOString();
   const eggs = r('Eggs', { location: 'fridge', status: 'out' }), milk = r('Milk', { location: 'fridge', status: 'out' });
   state.rows = {
+    ...emptyRows(),
     grocery_items: [
       r('Paper towels'), r('Birthday candles'),
       r('Eggs', { store: 'costco', note: '2 dozen' }), r('Bananas', { store: 'costco' }), r('Coffee beans', { store: 'costco' }),
@@ -96,6 +108,33 @@ if (PREVIEW) {
     { id: 'e2', task_id: filt.id, kind: 'skip', due_date: S.addDays(today, -62), at: S.addDays(today, -62) + 'T15:00:00Z', by_user: 'me' }
   ];
   state.members = ['me', 'p'];
+  // calendar sample (made up)
+  const at = (d, h, m = 0) => { const x = new Date(S.parse(S.addDays(today, d))); x.setUTCHours(h + 5, m); return x.toISOString(); }; // EST
+  const ev = (uid, o) => ({ uid, all_day: false, ...o });
+  state.rows.calendar_events = [
+    ev('s1', { kind: 'shift', shift_type: 'working', site: 'Main ED', title: 'Main ED', starts_at: at(0, 7), ends_at: at(0, 19), start_date: today, end_date: today }),
+    ev('s2', { kind: 'shift', shift_type: 'on_call', all_day: true, start_date: S.addDays(today, 1), end_date: S.addDays(today, 1) }),
+    ev('s3', { kind: 'shift', shift_type: 'working', site: 'Main ED', title: 'Main ED', starts_at: at(2, 19), ends_at: at(3, 7), start_date: S.addDays(today, 2), end_date: S.addDays(today, 3) }),
+    ev('s4', { kind: 'shift', shift_type: 'working', site: 'Urgent care', title: 'Urgent care', starts_at: at(5, 8), ends_at: at(5, 16), start_date: S.addDays(today, 5), end_date: S.addDays(today, 5) }),
+    ev('m1', { kind: 'meeting', title: null, starts_at: at(0, 9), ends_at: at(0, 9, 30), start_date: today, end_date: today }),
+    ev('m2', { kind: 'meeting', title: null, starts_at: at(4, 10), ends_at: at(4, 11), start_date: S.addDays(today, 4), end_date: S.addDays(today, 4) }),
+    ev('g1', { kind: 'event', title: 'Soccer practice', starts_at: at(3, 18), ends_at: at(3, 19), start_date: S.addDays(today, 3), end_date: S.addDays(today, 3) }),
+    ev('e1', { kind: 'event_shift', title: 'City FC vs. Sample United', starts_at: at(1, 17, 30), ends_at: at(1, 22, 30), start_date: S.addDays(today, 1), end_date: S.addDays(today, 1) }),
+    ev('e2', { kind: 'event_shift', title: 'City FC vs. River Town', starts_at: at(-12, 17), ends_at: at(-12, 22), start_date: S.addDays(today, -12), end_date: S.addDays(today, -12) }),
+    ev('e3', { kind: 'event_shift', title: 'Fall concert series', starts_at: at(-30, 16), ends_at: at(-30, 23), start_date: S.addDays(today, -30), end_date: S.addDays(today, -30) })
+  ];
+  state.rows.calendar_sync = Q.get('calerr')
+    ? [{ source: 'google', last_ok_at: new Date(Date.now() - 6 * 3600000).toISOString(), last_error: null }, { source: 'outlook', last_ok_at: new Date(Date.now() - 6 * 3600000).toISOString(), last_error: 'Feed returned 404' }]
+    : [{ source: 'google', last_ok_at: new Date(Date.now() - 20 * 60000).toISOString() }, { source: 'outlook', last_ok_at: new Date(Date.now() - 20 * 60000).toISOString() }];
+  state.rows.day_settings = [{ id: 1, nap_start: '13:00', nap_end: '15:00', dinner: '18:00', bed: '20:00', post_call_hours: 10, baby: [{ time: '10:30', label: 'Bottle' }, { time: '15:00', label: 'Bottle' }] }];
+  state.rows.kid_items = [
+    { id: 'k1', kind: 'appointment', title: 'Pediatrician', starts_at: at(0, 16, 30) },
+    { id: 'k2', kind: 'appointment', title: 'Dentist checkup', starts_at: at(12, 10) },
+    { id: 'k3', kind: 'supply', title: 'Diapers', status: 'low' }, { id: 'k4', kind: 'supply', title: 'Wipes', status: 'have' },
+    { id: 'k5', kind: 'supply', title: 'Formula', status: 'have' }, { id: 'k6', kind: 'supply', title: 'Kids’ Tylenol', status: 'out' }
+  ];
+  if (Q.get('cal')) ui.calTab = Q.get('cal');
+  if (Q.get('oncall')) state.rows.calendar_events[0] = ev('s1', { kind: 'shift', shift_type: 'on_call', all_day: true, start_date: today, end_date: today });
   if (Q.get('tab')) ui.choreTab = Q.get('tab');
   if (Q.get('howto')) ui.howto = filt.id;
   if (Q.get('edit')) ui.sheet = { type: 'chore', id: filt.id };
@@ -123,7 +162,10 @@ const I = {
   chore: '<path d="M5 12.5 9 16.5 19 6.5"/><path d="M5 19.5h14"/>',
   q: '<circle cx="12" cy="12" r="8.5"/><path d="M9.8 9.6a2.3 2.3 0 0 1 4.4.9c0 1.6-2.2 2-2.2 3.4M12 16.8v.1"/>',
   flag: '<path d="M6 20.5V4.5M6 5h10.5l-2 3.8 2 3.8H6"/>',
-  reset: '<path d="M4.5 12a7.5 7.5 0 1 0 2.2-5.3L4.5 9"/><path d="M4.5 4.5V9H9"/>'
+  reset: '<path d="M4.5 12a7.5 7.5 0 1 0 2.2-5.3L4.5 9"/><path d="M4.5 4.5V9H9"/>',
+  cal: '<rect x="4" y="5" width="16" height="15" rx="3"/><path d="M4 10h16M9 3v4M15 3v4"/>',
+  kid: '<circle cx="12" cy="7.5" r="3"/><path d="M6.5 20c.6-4 2.8-6 5.5-6s4.9 2 5.5 6"/>',
+  warn: '<path d="M12 4 21 19.5H3z"/><path d="M12 10v4.5M12 17v.1"/>'
 };
 const ic = (k, c = 'i') => `<svg class="${c}" viewBox="0 0 24 24" aria-hidden="true">${I[k]}</svg>`;
 const uid = () => (crypto.randomUUID ? crypto.randomUUID() : 'xxxxxxxx-xxxx-4xxx-8xxx-xxxxxxxxxxxx'.replace(/x/g, () => ((Math.random() * 16) | 0).toString(16)));
@@ -157,7 +199,7 @@ const groceryDone = () => live('grocery_items').filter((g) => g.checked_at).sort
 const onGrocery = (name, pantryId) => groceryOpen().find((g) => (pantryId && g.pantry_item_id === pantryId) || norm(g.name) === norm(name));
 const pantry = () => live('pantry_items');
 const outNotListed = () => pantry().filter((p) => p.status === 'out' && p.location !== LOC_SOON && !onGrocery(p.name, p.id));
-const findRow = (t, id) => state.rows[t].find((r) => r.id === id);
+const findRow = (t, id) => state.rows[t].find((r) => r[pkOf(t)] === id);
 
 /* ---------- sync badge (real connection + queue state) ---------- */
 function syncStatus() {
@@ -211,6 +253,22 @@ function updateRow(table, id, patch) {
 }
 const removeRow = (table, id) => updateRow(table, id, { deleted_at: new Date().toISOString() });
 
+/** Save fields on a row keyed by its natural key (a date, an event uid), creating it if needed. */
+function saveKeyed(table, key, patch) {
+  const pk = pkOf(table);
+  let row = findRow(table, key);
+  if (!row) { row = { [pk]: key }; state.rows[table].push(row); }
+  Object.assign(row, patch);
+  saveRows();
+  if (PREVIEW) return row;
+  const pending = state.queue.find((o) => o.kind === 'keyed' && o.table === table && o.key === key && !o.sending);
+  if (pending) Object.assign(pending.data, patch);
+  else state.queue.push({ kind: 'keyed', table, key, data: { ...patch } });
+  saveQueue();
+  flush();
+  return row;
+}
+
 /* ---------- server sync ---------- */
 let pulling = null;
 async function pull() {
@@ -228,14 +286,14 @@ async function pull() {
           api.rest('profiles?select=user_id,display_name,updated_at&deleted_at=is.null'),
           // Where each item was bought before, including cleared ones: new adds go to that store.
           api.rest('grocery_items?select=name,store&store=not.is.null&order=updated_at.desc&limit=500'),
-          ...TABLES.map((t) => api.rest(tableQuery(t)))
+          ...TABLES.map((t) => (OPTIONAL.has(t) ? api.rest(tableQuery(t)).catch((e) => { if (e.network || e.signedOut) throw e; return null; }) : api.rest(tableQuery(t))))
         ]);
         const mem = {};
         for (const h of history) if (!(norm(h.name) in mem)) mem[norm(h.name)] = h.store;
         state.storeMemory = mem;
         ls.set(K.stores, mem);
         state.profiles = profiles;
-        TABLES.forEach((t, i) => { state.rows[t] = tables[i]; });
+        TABLES.forEach((t, i) => { if (tables[i]) state.rows[t] = tables[i]; });
         overlayQueue();
         ls.set(K.profiles, state.profiles);
         saveRows();
@@ -266,6 +324,11 @@ function overlayQueue() {
       if (me) me.display_name = o.data.display_name; else state.profiles.push({ user_id: myId(), display_name: o.data.display_name });
       continue;
     }
+    if (o.kind === 'keyed') {
+      const rows = state.rows[o.table], row = rows.find((r) => r[pkOf(o.table)] === o.key);
+      if (row) Object.assign(row, o.data); else rows.push({ [pkOf(o.table)]: o.key, ...o.data });
+      continue;
+    }
     const rows = state.rows[o.table], row = rows.find((r) => r.id === o.id);
     if (row) Object.assign(row, o.data);
     else if (o.op === 'insert') rows.push({ ...o.data });
@@ -287,6 +350,9 @@ async function flush() {
             body: { user_id: myId(), display_name: op.data.display_name }
           });
           if (rows && rows[0]) upsertProfile(rows[0]);
+        } else if (op.kind === 'keyed') {
+          const pk = pkOf(op.table);
+          await api.rest(`${op.table}?on_conflict=${pk}`, { method: 'POST', prefer: 'resolution=merge-duplicates,return=minimal', body: { [pk]: op.key, ...op.data } });
         } else if (op.op === 'insert') {
           const { created_at, updated_at, ...body } = op.data; // server sets the clocks
           if (op.table === 'task_events') { delete body.created_at; }
@@ -419,7 +485,7 @@ function header(eyebrow, title) {
 
 function dock(on) {
   const b = (k, label, icon) => `<a class="press${on === k ? ' on' : ''}" href="#/${k}" ${on === k ? 'aria-current="page"' : ''}>${ic(icon)}${label}</a>`;
-  return `<nav class="dockwrap" aria-label="Main"><div class="dock">${b('home', 'Home', 'home')}${b('grocery', 'Grocery', 'cart')}${b('kitchen', 'Kitchen', 'box')}${b('chores', 'Chores', 'chore')}${b('settings', 'Settings', 'set')}</div></nav>`;
+  return `<nav class="dockwrap" aria-label="Main"><div class="dock">${b('home', 'Today', 'home')}${b('grocery', 'Grocery', 'cart')}${b('kitchen', 'Kitchen', 'box')}${b('chores', 'Chores', 'chore')}${b('settings', 'Settings', 'set')}</div></nav>`;
 }
 
 function choreLine() {
@@ -433,40 +499,6 @@ function resetCard() {
   if (S.weekdayOf(today) !== 0) return '';
   const n = missed(today).filter(S.resetsWeekly).length;
   return n ? `<a class="card press rise d1" href="#/reset"><div class="ic">${ic('reset')}</div><div><b>Sunday reset</b><small>${plural(n, 'chore')} to start fresh</small></div></a>` : '';
-}
-
-function homeView() {
-  const th = T.apply();
-  const name = myName();
-  const s = steps();
-  const next = s.find((x) => !x.done);
-  const doneCount = s.filter((x) => x.done).length;
-  const p = partner();
-  const hero = next ? `<div class="stack rise">
-      <${next.go ? `a href="${next.go}"` : 'section'} class="hero${next.go ? ' press' : ''}">
-        <p class="eyebrow">Next up</p>
-        <h2>${esc(next.title)}${next.go ? ic('chev', 'i hchev') : ''}</h2>
-        <p>${esc(next.body)}</p>
-        <div class="prog" role="img" aria-label="${doneCount} of ${s.length} setup steps done"><div class="trk"><b style="width:${(doneCount / s.length) * 100}%"></b></div><span>${doneCount} of ${s.length}</span></div>
-        ${next.later ? `<button class="later press" data-act="later">Later</button>` : ''}
-      </${next.go ? 'a' : 'section'}></div>` : '';
-  const house = p
-    ? `${name ? esc(name) : 'You'} and ${esc(p.display_name)}, both signed in`
-    : `${name ? esc(name) + ' signed in' : 'You’re signed in'}, partner not yet`;
-  const toGet = groceryOpen().length;
-  const out = pantry().filter((x) => x.status === 'out').length, low = pantry().filter((x) => x.status === 'low').length;
-  const kitchenLine = [out && `${out} out`, low && `${low} low`].filter(Boolean).join(', ');
-  return `${header(today(), name ? `${greeting()},<br>${esc(name)}` : greeting())}
-  <main>
-    ${hero}
-    ${toGet ? `<a class="card press rise d1" href="#/grocery"><div class="ic">${ic('cart')}</div><div><b>Grocery</b><small>${plural(toGet, 'thing')} to get</small></div></a>` : ''}
-    ${resetCard()}
-    ${choreLine() ? `<a class="card press rise d1" href="#/chores"><div class="ic">${ic('chore')}</div><div><b>Chores</b><small>${choreLine()}</small></div></a>` : ''}
-    ${kitchenLine ? `<a class="card press rise d1" href="#/kitchen"><div class="ic">${ic('box')}</div><div><b>Kitchen</b><small>${kitchenLine}</small></div></a>` : ''}
-    <a class="card press rise d2" href="#/settings"><div class="ic">${ic('ppl')}</div><div><b>Household</b><small>${house}</small></div></a>
-    <a class="card press rise d2" href="#/settings"><div class="ic">${ic(th.theme === 'night' ? 'moon' : 'sun')}</div><div><b>This phone</b><small>${phoneLine(th)}</small></div></a>
-  </main>
-  ${dock('home')}`;
 }
 
 /* --- grocery --- */
@@ -738,6 +770,295 @@ function taskSheet(t) {
     <button class="ghost press" data-act="tdel" data-id="${t.id}" style="margin-top:14px">Delete task</button>`;
 }
 
+/* --- today, calendar, kids, event shifts --- */
+const TZ = Intl.DateTimeFormat().resolvedOptions().timeZone;
+const FN_URL = `${(window.HOMEOS_CONFIG?.supabaseUrl || '').replace(/\/+$/, '')}/functions/v1/calendar-sync`;
+const daySet = () => ({ nap_start: '13:00', nap_end: '15:00', dinner: '18:00', bed: '20:00', post_call_hours: 10, baby: [], ...(state.rows.day_settings[0] || {}) });
+const hm = (t) => String(t || '').slice(0, 5);
+function clock(t, withAp = true) { // '13:30' -> '1:30 PM'
+  const [h, m] = hm(t).split(':').map(Number);
+  if (Number.isNaN(h)) return '';
+  const ap = h >= 12 ? 'PM' : 'AM', h12 = h % 12 || 12;
+  return `${h12}${m ? `:${String(m).padStart(2, '0')}` : ''}${withAp ? ` ${ap}` : ''}`;
+}
+function span(a, b) { // '13:00','15:00' -> '1–3 PM'
+  const pa = +hm(a).slice(0, 2) >= 12, pb = +hm(b).slice(0, 2) >= 12;
+  return pa === pb ? `${clock(a, false)}–${clock(b)}` : `${clock(a)} – ${clock(b)}`;
+}
+const addMin = (t, n) => { const [h, m] = hm(t).split(':').map(Number); const x = (h * 60 + m + n + 1440) % 1440; return `${String(Math.floor(x / 60)).padStart(2, '0')}:${String(x % 60).padStart(2, '0')}`; };
+const timeOf = (iso) => new Intl.DateTimeFormat('en-US', { timeZone: TZ, hour: 'numeric', minute: '2-digit' }).format(new Date(iso)).replace(':00', '');
+const hhmmOf = (iso) => new Intl.DateTimeFormat('en-GB', { timeZone: TZ, hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(new Date(iso));
+const calRows = () => state.rows.calendar_events;
+const activations = () => state.rows.day_overrides.filter((o) => o.activated_from).map((o) => ({ ...o, date: o.date }));
+function calSync() {
+  const rows = state.rows.calendar_sync;
+  if (!rows.length) return { setup: false, ok: false };
+  const err = rows.find((r) => r.last_error);
+  const lastOk = rows.map((r) => r.last_ok_at).filter(Boolean).sort().pop() || null;
+  const stale = !lastOk || Date.now() - Date.parse(lastOk) > 2 * 3600000;
+  return { setup: true, ok: !err && !stale, err, stale, lastOk, rows };
+}
+const statusOf = (date) => D.dayStatus(date, calRows(), activations(), { tz: TZ, postCallHours: daySet().post_call_hours, syncOk: calSync().ok });
+const CHIP = { working: 'work', activated: 'work', on_call: 'call', post_call: 'sleep', no_shift: 'none', not_posted: 'np', unknown: 'np' };
+function chipText(st) {
+  if (st.type === 'working') return `Working ${st.hours}`;
+  if (st.type === 'activated') return `Activated ${st.hours}`;
+  if (st.type === 'post_call') return `Post call ${st.hours}`;
+  return st.label;
+}
+const eventsOn = (date) => calRows().filter((r) => r.kind !== 'shift' && (r.all_day ? r.start_date <= date && date <= r.end_date : r.start_date === date));
+const kidsAll = () => live('kid_items');
+const apptsOn = (date) => kidsAll().filter((k) => k.kind === 'appointment' && k.starts_at && D.localDateOf(Date.parse(k.starts_at), TZ) === date);
+
+// Ask the server to re-read the calendars (at most every few minutes from this phone), then refresh.
+let lastKick = 0;
+async function kickCalendar(force = false) {
+  if (PREVIEW || !api.getSession() || !api.configured || !navigator.onLine) return;
+  if (!force && Date.now() - lastKick < 5 * 60000) return;
+  lastKick = Date.now();
+  try {
+    const r = await fetch(`${FN_URL}${force ? '?force=1' : ''}`, { method: 'POST', headers: { apikey: window.HOMEOS_CONFIG.supabaseKey, 'Content-Type': 'application/json' }, body: '{}' });
+    if (r.ok) setTimeout(pull, 300);
+  } catch {}
+}
+
+function timeline(date) {
+  const ds = daySet(), ov = findRow('day_overrides', date) || {};
+  const nap = ov.nap_start ? [ov.nap_start, ov.nap_end] : [ds.nap_start, ds.nap_end];
+  const items = [];
+  for (const e of eventsOn(date)) {
+    if (e.all_day) continue;
+    const mins = Math.round((Date.parse(e.ends_at) - Date.parse(e.starts_at)) / 60000);
+    const dur = mins >= 60 ? `${+(mins / 60).toFixed(1)} hr${mins === 60 ? '' : 's'}` : `${mins} min`;
+    items.push({ k: hhmmOf(e.starts_at), t: timeOf(e.starts_at), w: e.kind === 'meeting' ? 'Work meeting' : e.title || 'Busy', sub: e.kind === 'event_shift' ? `${D.hoursLabel(e.starts_at, e.ends_at, TZ, true)}` : dur, tag: e.kind === 'event_shift' ? 'Event shift' : '', cls: 'ev' });
+  }
+  for (const a of apptsOn(date)) items.push({ k: hhmmOf(a.starts_at), t: timeOf(a.starts_at), w: a.title, sub: 'Kids', cls: 'ev', go: '#/kids' });
+  items.push({ k: hm(nap[0]), t: span(nap[0], nap[1]), w: 'Nap', sub: ov.nap_start ? `Usually ${span(ds.nap_start, ds.nap_end)}` : '', nap: true });
+  items.push({ k: hm(ds.dinner), t: clock(ds.dinner), w: 'Dinner' });
+  items.push({ k: hm(ds.bed), t: clock(ds.bed), w: 'Bed' });
+  items.sort((a, b) => a.k.localeCompare(b.k));
+  const allDay = eventsOn(date).filter((e) => e.all_day);
+  return { items, allDay, napMoved: !!ov.nap_start, nap };
+}
+
+function tlHtml(date, withNapBtn) {
+  const { items, allDay, napMoved, nap } = timeline(date);
+  const now = hhmmOf(new Date().toISOString());
+  const row = (x) => {
+    const btn = x.nap && withNapBtn ? `<button class="mini press" data-act="napshift" data-date="${date}">${napMoved ? 'Usual time' : `Today ${span(addMin(nap[0], 60), addMin(nap[1], 60)).replace(' PM', '').replace(' AM', '')}`}</button>` : '';
+    const cur = withNapBtn && x.nap && now >= hm(nap[0]) && now < hm(nap[1]);
+    return `<div class="r ${x.cls || ''}${cur ? ' now' : ''}"><span class="t">${esc(x.t)}</span><span class="w">${esc(x.w)}${x.tag ? `<span class="tag2">${esc(x.tag)}</span>` : ''}${x.sub ? `<small>${esc(x.sub)}</small>` : ''}</span>${btn}</div>`;
+  };
+  return `${allDay.length ? `<div class="alld">${allDay.map((e) => `<span>${esc(e.title || 'Busy')}</span>`).join('')}</div>` : ''}<div class="tl rise d1">${items.map(row).join('')}</div>`;
+}
+
+function shiftHero(today) {
+  const cs = calSync();
+  if (!cs.setup) return `<a class="card press rise" href="#/settings"><div class="ic">${ic('cal')}</div><div><b>Calendar</b><small>Not connected yet. Your shifts will show here.</small></div></a>`;
+  const st = statusOf(today), tom = statusOf(S.addDays(today, 1));
+  const asOf = !cs.ok && cs.lastOk ? ` · as of ${timeOf(cs.lastOk)}` : '';
+  const pc = st.postCall && st.type !== 'post_call' ? `<p class="pcl">Post call until ${timeOf(st.postCall.until)}</p>` : '';
+  const act = st.type === 'on_call' ? `<button class="actb press" data-act="actopen" data-date="${today}">I got activated</button>`
+    : st.type === 'activated' ? `<button class="actb press" data-act="actopen" data-date="${today}">Edit activation</button>` : '';
+  const sub = st.type === 'working' ? esc(st.site || '') : st.type === 'on_call' ? 'Not working unless called in' : st.type === 'post_call' ? 'Rest after the overnight' : st.type === 'not_posted' ? 'Nothing posted for today yet' : st.type === 'unknown' ? 'Can’t tell until the calendar updates' : '';
+  return `<div class="stack rise" style="margin:0 0 26px"><a class="hero shift press${st.type === 'unknown' ? ' unknown' : ''}" href="#/calendar">
+    <p class="eyebrow">Your day${asOf}</p>
+    <div class="row2"><h2>${esc(st.label)}</h2><span class="big">${esc(st.hoursLong || (st.type === 'post_call' ? st.hours : '') || '')}</span></div>
+    ${sub ? `<p>${sub}</p>` : ''}${pc}
+    <div class="tom"><span>Tomorrow</span><b>${esc(chipText(tom))}</b></div>
+  </a>${act ? `<div class="actrow">${act}</div>` : ''}</div>`;
+}
+
+function syncWarn() {
+  const cs = calSync();
+  if (!cs.setup || cs.ok) return '';
+  const bad = cs.rows.filter((r) => r.last_error).map((r) => (r.source === 'google' ? 'Google' : 'Outlook'));
+  const ago = cs.lastOk ? `Last updated ${S.dueLabel(D.localDateOf(Date.parse(cs.lastOk), TZ), todayStr()).toLowerCase() === 'today' ? `at ${timeOf(cs.lastOk)}` : `on ${new Date(cs.lastOk).toLocaleDateString()}`}.` : 'It hasn’t updated yet.';
+  return `<button class="warn press" data-act="calforce">${ic('warn')}<span><b>${bad.length ? `${bad.join(' and ')} calendar couldn’t update` : 'Calendar is out of date'}</b>${ago} Shifts may be out of date. Tap to try again.</span></button>`;
+}
+
+function calFooter() {
+  const cs = calSync();
+  if (!cs.setup) return '';
+  const mark = (src) => { const r = cs.rows.find((x) => x.source === src); return r ? `${src === 'google' ? 'Google' : 'Outlook'} ${r.last_error ? '✕' : '✓'}` : ''; };
+  return `<p class="upd">${cs.lastOk ? `Calendar updated ${timeOf(cs.lastOk)}` : 'Calendar not updated yet'} · ${[mark('google'), mark('outlook')].filter(Boolean).join(' · ')}</p>`;
+}
+
+function todayCards(today) {
+  const cards = [];
+  const kidsLow = kidsAll().filter((k) => k.kind === 'supply' && (k.status === 'low' || k.status === 'out')).length;
+  const nextAppt = kidsAll().filter((k) => k.kind === 'appointment' && k.starts_at && Date.parse(k.starts_at) > Date.now()).sort((a, b) => a.starts_at.localeCompare(b.starts_at))[0];
+  const kidLine = [nextAppt && `${nextAppt.title} ${S.dueLabel(D.localDateOf(Date.parse(nextAppt.starts_at), TZ), today).toLowerCase()}`, kidsLow && `${kidsLow} supplies low`].filter(Boolean).join(' · ');
+  cards.push(`<a class="card press rise d1" href="#/kids"><div class="ic">${ic('kid')}</div><div><b>Kids</b><small>${esc(kidLine || 'Appointments and supplies')}</small></div></a>`);
+  const cl = choreLine(); if (cl) cards.push(`<a class="card press rise d1" href="#/chores"><div class="ic">${ic('chore')}</div><div><b>Chores</b><small>${cl}</small></div></a>`);
+  const toGet = groceryOpen().length; if (toGet) cards.push(`<a class="card press rise d2" href="#/grocery"><div class="ic">${ic('cart')}</div><div><b>Grocery</b><small>${plural(toGet, 'thing')} to get</small></div></a>`);
+  const out = pantry().filter((x) => x.status === 'out').length, low = pantry().filter((x) => x.status === 'low').length;
+  const kl = [out && `${out} out`, low && `${low} low`].filter(Boolean).join(', ');
+  if (kl) cards.push(`<a class="card press rise d2" href="#/kitchen"><div class="ic">${ic('box')}</div><div><b>Kitchen</b><small>${kl}</small></div></a>`);
+  const nextShift = eventShifts().filter((e) => e.start_date >= today).pop();
+  if (nextShift) cards.push(`<a class="card press rise d2" href="#/events"><div class="ic">${ic('cal')}</div><div><b>Event shifts</b><small>Next: ${esc(nextShift.title)} ${S.dueLabel(nextShift.start_date, today).toLowerCase()}</small></div></a>`);
+  return cards.join('');
+}
+
+function homeView() {
+  const td = todayStr();
+  const name = myName();
+  const s = steps();
+  const next = s.find((x) => !x.done);
+  const doneCount = s.filter((x) => x.done).length;
+  const setup = next ? `<div class="stack rise">
+      <${next.go ? `a href="${next.go}"` : 'section'} class="hero${next.go ? ' press' : ''}">
+        <p class="eyebrow">Next up</p>
+        <h2>${esc(next.title)}${next.go ? ic('chev', 'i hchev') : ''}</h2>
+        <p>${esc(next.body)}</p>
+        <div class="prog" role="img" aria-label="${doneCount} of ${s.length} setup steps done"><div class="trk"><b style="width:${(doneCount / s.length) * 100}%"></b></div><span>${doneCount} of ${s.length}</span></div>
+        ${next.later ? `<button class="later press" data-act="later">Later</button>` : ''}
+      </${next.go ? 'a' : 'section'}></div>` : '';
+  const ds = daySet();
+  const baby = (ds.baby || []).filter((b) => b && b.label);
+  return `${header(today(), name ? `${greeting()},<br>${esc(name)}` : greeting())}
+  <main>
+    ${syncWarn()}
+    ${setup}
+    ${shiftHero(td)}
+    ${resetCard()}
+    ${sec('Today')}${tlHtml(td, true)}
+    ${baby.length ? `${sec('Baby')}<div class="tl">${baby.sort((a, b) => hm(a.time).localeCompare(hm(b.time))).map((b) => `<div class="r"><span class="t">${esc(clock(b.time))}</span><span class="w">${esc(b.label)}</span></div>`).join('')}</div>` : ''}
+    <div style="margin-top:14px">${todayCards(td)}</div>
+    <a class="more press" href="#/calendar">${ic('cal')}Week and month</a>
+    ${calFooter()}
+  </main>
+  ${dock('home')}`;
+}
+
+function calendarView() {
+  const today = todayStr();
+  const days = ui.calTab === 'month' ? 35 : 7;
+  const seg = `<div class="seg seg3 rise"><a class="${''}" href="#/home">Today</a><button class="${ui.calTab !== 'month' ? 'on' : ''}" data-act="caltab" data-v="week">Week</button><button class="${ui.calTab === 'month' ? 'on' : ''}" data-act="caltab" data-v="month">Month</button></div>`;
+  const cards = [];
+  for (let i = 0; i < days; i++) {
+    const d = S.addDays(today, i), st = statusOf(d);
+    const dt = new Date(S.parse(d));
+    const dn = dt.toLocaleDateString(undefined, { weekday: 'short', timeZone: 'UTC' }), dd = dt.toLocaleDateString(undefined, { month: 'short', day: 'numeric', timeZone: 'UTC' });
+    const evs = [...eventsOn(d).map((e) => ({ k: e.all_day ? '00:00' : hhmmOf(e.starts_at), t: e.all_day ? 'All day' : timeOf(e.starts_at), w: e.kind === 'meeting' ? 'Work meeting' : e.title || 'Busy', es: e.kind === 'event_shift' })),
+      ...apptsOn(d).map((a) => ({ k: hhmmOf(a.starts_at), t: timeOf(a.starts_at), w: a.title }))].sort((a, b) => a.k.localeCompare(b.k));
+    const pc = st.postCall && st.type !== 'post_call' ? `<span class="sc sleep">Post call until ${timeOf(st.postCall.until)}</span>` : '';
+    const list = ui.calTab === 'month' ? (evs.length ? `<div class="el">${evs.slice(0, 2).map((e) => `<b>${esc(e.t)}</b>${esc(e.w)}`).join('<br>')}${evs.length > 2 ? `<br>+${evs.length - 2} more` : ''}</div>` : '')
+      : (evs.length ? `<div class="el">${evs.map((e) => `<b>${esc(e.t)}</b>${esc(e.w)}${e.es ? '<span class="tag2">Event shift</span>' : ''}`).join('<br>')}</div>` : '');
+    cards.push(`<div class="day${d === today ? ' today' : ''}"><div class="dh"><span class="dn">${dn}<small>${dd}</small></span><span class="chips2"><span class="sc ${CHIP[st.type]}">${esc(chipText(st))}</span>${pc}</span></div>${st.type === 'working' && st.site ? `<div class="el site">${esc(st.site)}</div>` : ''}${list}</div>`);
+  }
+  const end = new Date(S.parse(S.addDays(today, days - 1))).toLocaleDateString(undefined, { month: 'short', day: 'numeric', timeZone: 'UTC' });
+  const start = new Date(S.parse(today)).toLocaleDateString(undefined, { month: 'short', day: 'numeric', timeZone: 'UTC' });
+  return `${header(`${start} – ${end}`, ui.calTab === 'month' ? 'Next 5 weeks' : 'This week')}
+  <main>${syncWarn()}${seg}${cards.join('')}${calFooter()}</main>
+  ${dock('home')}`;
+}
+
+/* kids */
+function kidsView() {
+  const appts = kidsAll().filter((k) => k.kind === 'appointment').sort((a, b) => String(a.starts_at).localeCompare(String(b.starts_at)));
+  const upcoming = appts.filter((a) => !a.starts_at || Date.parse(a.starts_at) > Date.now() - 2 * 3600000);
+  const supplies = kidsAll().filter((k) => k.kind === 'supply').sort((a, b) => a.title.localeCompare(b.title));
+  const today = todayStr();
+  const apptRow = (a) => `<div class="it appt"><button class="nm" data-act="kitem" data-id="${a.id}">${esc(a.title)}<span class="when">${a.starts_at ? `${S.dueLabel(D.localDateOf(Date.parse(a.starts_at), TZ), today)} · ${timeOf(a.starts_at)}` : 'No time set'}</span></button>${a.starts_at ? `<button class="cal press" data-act="addcal" data-id="${a.id}">${ic('cal')}Add</button>` : ''}</div>`;
+  const hloK = (k) => { const b = (s2, label) => `<button class="${k.status === s2 ? s2[0] : ''}" data-act="kstat" data-id="${k.id}" data-s="${s2}" aria-pressed="${k.status === s2}">${label}</button>`; return `<span class="hlo">${b('have', 'Have')}${b('low', 'Low')}${b('out', 'Out')}</span>`; };
+  const supRow = (k) => {
+    const sub = k.status === 'out' || k.status === 'low' ? (onGrocery(k.title) ? `<span class="onlist">${ic('check')}On grocery</span>` : `<span class="send press" data-act="ksend" data-id="${k.id}" role="button">${ic('plus')}Grocery</span>`) : '';
+    return `<div class="it"><div class="nm"><button class="nmb" data-act="kitem" data-id="${k.id}">${esc(k.title)}</button>${sub}</div>${hloK(k)}</div>`;
+  };
+  const lowN = supplies.filter((k) => k.status !== 'have').length;
+  return `${header('Both kids', 'Kids')}
+  <main>
+    <form class="qa slim rise" data-form="kappt" autocomplete="off" style="margin-top:0">
+      <div class="row"><input class="fld" name="name" type="text" placeholder="Add an appointment" maxlength="120" enterkeyhint="next" aria-label="Appointment"><button class="add press" type="submit" aria-label="Add">${ic('plus')}</button></div>
+      <div class="row when2"><input class="dt" name="when" type="datetime-local" aria-label="When"></div>
+    </form>
+    ${upcoming.length ? `${sec('Appointments', upcoming.length)}<div class="list">${upcoming.map(apptRow).join('')}</div>` : `<p class="empty">No appointments coming up.</p>`}
+    ${sec('Supplies', lowN ? `${lowN} low or out` : '')}
+    <form class="qa slim" data-form="ksup" autocomplete="off" style="margin:0 0 8px"><div class="row"><input class="fld" name="name" type="text" placeholder="Add a supply (diapers, wipes…)" maxlength="120" enterkeyhint="done" aria-label="Supply"><button class="add press" type="submit" aria-label="Add">${ic('plus')}</button></div></form>
+    ${supplies.length ? `<div class="list">${supplies.map(supRow).join('')}</div>` : ''}
+  </main>
+  ${dock('home')}`;
+}
+
+function kidSheet(k) {
+  if (!k || k.deleted_at) return '';
+  const local = k.starts_at ? `${D.localDateOf(Date.parse(k.starts_at), TZ)}T${hhmmOf(k.starts_at)}` : '';
+  return `<h2><input class="ttl" data-kf="title" data-id="${k.id}" value="${esc(k.title)}" maxlength="120" aria-label="Name" enterkeyhint="done"><button class="lnk" data-act="close">Done</button></h2>
+    <div class="list frm">${k.kind === 'appointment' ? `<label class="frow">When<input type="datetime-local" class="dt" data-kf="starts_at" data-id="${k.id}" value="${local}"></label>` : ''}</div>
+    ${sec('Notes')}<textarea class="ta" data-kf="notes" data-id="${k.id}" rows="3" placeholder="Optional">${esc(k.notes || '')}</textarea>
+    ${k.kind === 'appointment' && k.starts_at ? `<div class="acts2" style="margin-top:12px"><a class="pri press" target="_blank" rel="noopener" href="${gcalLink(k)}">${ic('cal')}Google Calendar</a><button class="ghost press" data-act="ics" data-id="${k.id}">Phone calendar</button></div>` : ''}
+    <button class="ghost press" data-act="kdel" data-id="${k.id}" style="margin-top:12px">Delete</button>`;
+}
+
+const icsStamp = (iso) => new Date(iso).toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '');
+function gcalLink(k) {
+  const end = new Date(Date.parse(k.starts_at) + 3600000).toISOString();
+  return `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent(k.title)}&dates=${icsStamp(k.starts_at)}/${icsStamp(end)}`;
+}
+function downloadIcs(k) {
+  const end = new Date(Date.parse(k.starts_at) + 3600000).toISOString();
+  const icsEsc = (t) => String(t).replace(/[\\,;]/g, (c) => `\\${c}`).replace(/\n/g, '\\n');
+  const body = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Home//EN', 'BEGIN:VEVENT', `UID:${k.id}@home`, `DTSTAMP:${icsStamp(new Date().toISOString())}`,
+    `DTSTART:${icsStamp(k.starts_at)}`, `DTEND:${icsStamp(end)}`, `SUMMARY:${icsEsc(k.title)}`,
+    'BEGIN:VALARM', 'ACTION:DISPLAY', `DESCRIPTION:${icsEsc(k.title)}`, 'TRIGGER:-PT1H', 'END:VALARM', 'END:VEVENT', 'END:VCALENDAR'].join('\r\n');
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([body], { type: 'text/calendar' }));
+  a.download = `${k.title.replace(/[^\w -]+/g, '').slice(0, 40) || 'appointment'}.ics`;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+}
+
+/* event medicine shifts: a list from the calendar, ready to copy for checking against the pay email */
+const eventShifts = () => calRows().filter((r) => r.kind === 'event_shift').sort((a, b) => String(b.starts_at || b.start_date).localeCompare(String(a.starts_at || a.start_date)));
+const shiftHours = (e) => (e.starts_at && e.ends_at ? Math.round(((Date.parse(e.ends_at) - Date.parse(e.starts_at)) / 3600000) * 4) / 4 : 0);
+const fmtHrs = (h) => `${+h.toFixed(2)} hr${h === 1 ? '' : 's'}`;
+const shiftDay = (e) => new Date(S.parse(e.start_date)).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' });
+const shiftLine = (e) => `${shiftDay(e)} · ${e.title} · ${e.starts_at ? D.hoursLabel(e.starts_at, e.ends_at, TZ) : 'all day'} · ${fmtHrs(shiftHours(e))}`;
+
+function eventsView() {
+  const today = todayStr();
+  const all = eventShifts();
+  const past = all.filter((e) => e.start_date <= today), next = all.filter((e) => e.start_date > today).reverse();
+  const byMonth = new Map();
+  for (const e of past) { const k = e.start_date.slice(0, 7); if (!byMonth.has(k)) byMonth.set(k, []); byMonth.get(k).push(e); }
+  const row = (e) => `<div class="it"><span class="nm">${esc(e.title)}<span class="meta"><b>${esc(shiftDay(e).replace(/, \d{4}$/, ''))}</b> · ${e.starts_at ? D.hoursLabel(e.starts_at, e.ends_at, TZ) : 'All day'} · ${fmtHrs(shiftHours(e))}</span></span></div>`;
+  const months = [...byMonth.entries()].map(([k, es]) => {
+    const label = new Date(`${k}-01T12:00:00Z`).toLocaleDateString(undefined, { month: 'long', year: 'numeric', timeZone: 'UTC' });
+    return `<div class="sec"><b>${esc(label)}</b><button class="clear press" data-act="ecopy" data-m="${k}">Copy · ${fmtHrs(es.reduce((t, e) => t + shiftHours(e), 0))}</button></div><div class="list">${es.map(row).join('')}</div>`;
+  }).join('');
+  const recent = past.length;
+  return `${header(recent ? `${plural(recent, 'shift')} worked · ${fmtHrs(past.reduce((t, e) => t + shiftHours(e), 0))}` : 'Event medicine', 'Event shifts')}
+  <main>
+    <p class="rs-sum">From your calendar’s “Event Physician” entries. Copy a month and paste it to Claude with your pay email to check nothing was missed.</p>
+    ${next.length ? `${sec('Coming up', next.length)}<div class="list">${next.map(row).join('')}</div>` : ''}
+    ${months || (!next.length ? `<p class="empty">No event shifts found yet. They show up once the calendar is connected.</p>` : '')}
+  </main>
+  ${dock('home')}`;
+}
+
+async function copyShifts(month, btn) {
+  const es = eventShifts().filter((e) => e.start_date.startsWith(month) && e.start_date <= todayStr()).reverse(); // worked only
+  const label = new Date(`${month}-01T12:00:00Z`).toLocaleDateString(undefined, { month: 'long', year: 'numeric', timeZone: 'UTC' });
+  const text = `Event medicine shifts, ${label} (from my calendar):\n${es.map(shiftLine).join('\n')}\nTotal: ${es.length} shifts, ${fmtHrs(es.reduce((t, e) => t + shiftHours(e), 0))}\n\nPlease compare these against my pay email and list any shift or hours that are missing or different.`;
+  try { await navigator.clipboard.writeText(text); btn.classList.add('jelly'); btn.textContent = 'Copied'; setTimeout(() => render({ soft: true, keepFocus: '__none' }), 1400); }
+  catch { prompt('Copy this:', text); }
+}
+
+/* activation */
+function activationSheet(date) {
+  const ov = findRow('day_overrides', date) || {};
+  const local = (iso) => (iso ? `${D.localDateOf(Date.parse(iso), TZ)}T${hhmmOf(iso)}` : '');
+  const nowLocal = `${todayStr()}T${hhmmOf(new Date().toISOString())}`;
+  return `<h2>Activated<button class="lnk" data-act="close">Done</button></h2>
+    <p class="hint" style="margin-top:0">Shared with both phones. If it runs overnight, the next day shows Post call for ${daySet().post_call_hours} hours after you get back.</p>
+    <div class="list frm">
+      <label class="frow">Went in<input type="datetime-local" class="dt" data-af="activated_from" data-date="${date}" value="${local(ov.activated_from) || nowLocal}"></label>
+      <label class="frow">Got back<input type="datetime-local" class="dt" data-af="activated_to" data-date="${date}" value="${local(ov.activated_to)}"></label>
+    </div>
+    <div class="acts2" style="margin-top:12px">${ov.activated_from ? '' : `<button class="pri press" data-act="actsave" data-date="${date}">${ic('check')}I’m going in</button>`}${ov.activated_from ? `<button class="ghost press" data-act="actclear" data-date="${date}">Not activated after all</button>` : ''}</div>`;
+}
+
 /* --- bottom sheets --- */
 function sheetView() {
   const s = ui.sheet;
@@ -748,6 +1069,9 @@ function sheetView() {
   else if (s.type === 'pitem') body = pantryItemSheet(findRow('pantry_items', s.id));
   else if (s.type === 'chore') body = choreSheet(findRow('tasks', s.id));
   else if (s.type === 'task') body = taskSheet(findRow('tasks', s.id));
+  else if (s.type === 'kid') body = kidSheet(findRow('kid_items', s.id));
+  else if (s.type === 'activation') body = activationSheet(s.date);
+  else if (s.type === 'addcal') { const k = findRow('kid_items', s.id); body = k && k.starts_at ? `<h2>${esc(k.title)}</h2><div class="list opts"><a class="opt press" target="_blank" rel="noopener" href="${gcalLink(k)}">Google Calendar${ic('chev')}</a><button class="opt press" data-act="ics" data-id="${k.id}">Phone calendar, with a 1 hour alert${ic('chev')}</button></div>` : ''; }
   if (!body) { ui.sheet = null; return ''; }
   return `<div class="scrim" data-act="close"></div><div class="bs${s.type === 'addfrom' || s.type === 'chore' ? '' : ' short'}" role="dialog" aria-modal="true">
     <div class="grab" data-act="close"></div>${body}</div>`;
@@ -821,6 +1145,21 @@ function settingsView() {
     <div class="grp rise d1">
       <div class="tiles" role="radiogroup" aria-label="Theme">${tile('blush')}${tile('roast')}${tile('night')}</div>
       ${th.theme === 'night' ? `<button class="fl swr" role="switch" aria-checked="${th.dimOn}" data-act="dim">Dim 10 PM to 6 AM<span class="tg" aria-hidden="true"></span></button>` : ''}
+    </div>
+    <p class="gt">Day</p>
+    <div class="grp rise d1">
+      <label class="fl">Nap<span class="pair"><input type="time" class="dt sm" data-dset="nap_start" value="${hm(daySet().nap_start)}" aria-label="Nap starts"><span class="evl">to</span><input type="time" class="dt sm" data-dset="nap_end" value="${hm(daySet().nap_end)}" aria-label="Nap ends"></span></label>
+      <label class="fl">Dinner<input type="time" class="dt sm" data-dset="dinner" value="${hm(daySet().dinner)}"></label>
+      <label class="fl">Bed<input type="time" class="dt sm" data-dset="bed" value="${hm(daySet().bed)}"></label>
+      <label class="fl">Post call<span class="pair"><input type="number" class="num" min="0" max="24" inputmode="numeric" data-dset="post_call_hours" value="${daySet().post_call_hours}"><span class="evl">hours</span></span></label>
+    </div>
+    <p class="gt">Baby, one per line (like “10:30 Bottle”)</p>
+    <textarea class="ta rise d1" data-dset="baby" rows="3" placeholder="10:30 Bottle">${esc((daySet().baby || []).map((b) => `${b.time ? clock(b.time).replace(' ', '') : ''} ${b.label}`.trim()).join('\n'))}</textarea>
+    <p class="gt" style="margin-top:18px">Calendar</p>
+    <div class="grp rise d1">
+      ${calSync().setup ? calSync().rows.map((r) => `<div class="fl">${r.source === 'google' ? 'Google' : 'Outlook'}<span class="v">${r.last_error ? esc(r.last_error) : r.last_ok_at ? `Updated ${timeOf(r.last_ok_at)}` : 'Waiting'}</span></div>`).join('') : '<div class="fl">Not connected<span class="v">See README, step 10</span></div>'}
+      <button class="fl press" data-act="calsync">Sync now<span class="v">${ic('reset')}</span></button>
+      <a class="fl press" href="#/events">Event shifts<span class="v">${ic('chev')}</span></a>
     </div>
     <p class="gt">Lists</p>
     <div class="grp rise d1">
@@ -913,7 +1252,7 @@ async function importChores(file) {
 
 /* ---------- render + events ---------- */
 let current = '';
-const ROUTES = ['home', 'grocery', 'kitchen', 'chores', 'reset', 'settings'];
+const ROUTES = ['home', 'grocery', 'kitchen', 'chores', 'reset', 'settings', 'calendar', 'kids', 'events'];
 function route() {
   if (!api.getSession()) return 'signin';
   if (PREVIEW && PREVIEW !== 'signin' && !location.hash) return PREVIEW;
@@ -921,7 +1260,7 @@ function route() {
   return ROUTES.includes(h) ? h : 'home';
 }
 
-const VIEWS = { signin: signinView, home: homeView, grocery: groceryView, kitchen: kitchenView, chores: choresView, reset: resetView, settings: settingsView };
+const VIEWS = { signin: signinView, home: homeView, grocery: groceryView, kitchen: kitchenView, chores: choresView, reset: resetView, settings: settingsView, calendar: calendarView, kids: kidsView, events: eventsView };
 
 function render({ soft = false, keepFocus = null, fx = null } = {}) {
   const r = route();
@@ -956,6 +1295,15 @@ function render({ soft = false, keepFocus = null, fx = null } = {}) {
 $app.addEventListener('submit', async (e) => {
   e.preventDefault();
   const f = e.target, kind = f.dataset.form;
+  if (kind === 'kappt' || kind === 'ksup') {
+    const name = f.name.value.trim();
+    if (!name) return;
+    let starts = null;
+    if (kind === 'kappt' && f.when.value) starts = new Date(f.when.value).toISOString(); // local time typed -> UTC
+    const k = insertRow('kid_items', kind === 'kappt' ? { kind: 'appointment', title: name.slice(0, 120), starts_at: starts, status: null } : { kind: 'supply', title: name.slice(0, 120), status: 'have' });
+    render({ soft: true, keepFocus: `[data-form="${kind}"] .fld`, fx: [[`.it:has([data-id="${k.id}"])`, 'pop']] });
+    return;
+  }
   if (kind === 'tadd') {
     const name = f.name.value.trim();
     if (!name) return;
@@ -1120,6 +1468,35 @@ $app.addEventListener('click', (e) => {
     case 'tflag': { const x = findRow('tasks', id); if (x) updateRow('tasks', id, { priority: !x.priority }); return soft([[`.flag[data-id="${id}"]`, 'jelly']]); }
     case 'tshowdone': ui.showDone = !ui.showDone; return soft();
     case 'tdel': removeRow('tasks', id); ui.sheet = null; return soft();
+    // today + calendar
+    case 'napshift': {
+      const d = t.dataset.date, ov = findRow('day_overrides', d) || {}, ds = daySet();
+      if (ov.nap_start) saveKeyed('day_overrides', d, { nap_start: null, nap_end: null });
+      else saveKeyed('day_overrides', d, { nap_start: addMin(ds.nap_start, 60), nap_end: addMin(ds.nap_end, 60) });
+      return soft([['[data-act="napshift"]', 'jelly']]);
+    }
+    case 'actopen': ui.sheet = { type: 'activation', date: t.dataset.date }; return soft();
+    case 'actsave': {
+      const inp = $app.querySelector('[data-af="activated_from"]');
+      saveKeyed('day_overrides', t.dataset.date, { activated_from: inp && inp.value ? new Date(inp.value).toISOString() : new Date().toISOString() });
+      return soft();
+    }
+    case 'actclear': saveKeyed('day_overrides', t.dataset.date, { activated_from: null, activated_to: null }); ui.sheet = null; return soft();
+    case 'caltab': ui.calTab = t.dataset.v; return soft();
+    case 'calforce': {
+      if (state.rows.calendar_sync.length) { state.rows.calendar_sync.forEach((r) => { r.last_error = r.last_error ? 'Retrying…' : r.last_error; }); }
+      kickCalendar(true); return soft();
+    }
+    // kids
+    case 'kitem': ui.sheet = { type: 'kid', id }; return soft();
+    case 'kstat': updateRow('kid_items', id, { status: t.dataset.s }); return soft([[`[data-act="kstat"][data-id="${id}"][data-s="${t.dataset.s}"]`, 'jelly']]);
+    case 'ksend': { const k = findRow('kid_items', id); if (k) addGrocery(k.title); return soft([[`.it:has([data-id="${id}"]) .onlist`, 'pop']]); }
+    case 'kdel': removeRow('kid_items', id); ui.sheet = null; return soft();
+    case 'addcal': ui.sheet = { type: 'addcal', id }; return soft();
+    case 'ics': { const k = findRow('kid_items', id); if (k && k.starts_at) downloadIcs(k); ui.sheet = null; return soft(); }
+    // event shifts
+    case 'ecopy': copyShifts(t.dataset.m, t); return;
+    case 'calsync': kickCalendar(true); return soft([['[data-act="calsync"]', 'jelly']]);
     case 'resetweek': {
       if (t.classList.contains('ld')) return;
       t.classList.add('ld');
@@ -1136,7 +1513,28 @@ $app.addEventListener('change', (e) => {
   if (e.target.id === 'nm') saveName(e.target.value);
   if (e.target.dataset.act === 'costcocsv' && e.target.files[0]) importCostco(e.target.files[0]);
   if (e.target.dataset.act === 'chorescsv' && e.target.files[0]) importChores(e.target.files[0]);
-  const f = e.target.dataset.field, fid = e.target.dataset.id;
+  const ds = e.target.dataset;
+  if (ds.kf && ds.id) {
+    let v = e.target.value;
+    if (ds.kf === 'title') { v = v.trim().slice(0, 120); if (!v) return render({ soft: true, keepFocus: '__none' }); }
+    else if (ds.kf === 'starts_at') v = v ? new Date(v).toISOString() : null;
+    else v = v.trim() || null;
+    updateRow('kid_items', ds.id, { [ds.kf]: v });
+    return render({ soft: true, keepFocus: '__none' });
+  }
+  if (ds.af && ds.date) {
+    saveKeyed('day_overrides', ds.date, { [ds.af]: e.target.value ? new Date(e.target.value).toISOString() : null });
+    return render({ soft: true, keepFocus: '__none' });
+  }
+  if (ds.dset) {
+    let v = e.target.value;
+    if (ds.dset === 'post_call_hours') v = Math.max(0, Math.min(24, parseInt(v, 10) || 0));
+    else if (ds.dset === 'baby') v = v.split('\n').map((l) => l.trim()).filter(Boolean).map((l) => { const m = /^(\d{1,2})(?::(\d{2}))?\s*(am|pm|a|p)?\s+(.+)$/i.exec(l); if (!m) return { time: '', label: l.slice(0, 60) }; let h = +m[1]; const ap = (m[3] || '').toLowerCase(); if (ap.startsWith('p') && h < 12) h += 12; if (ap.startsWith('a') && h === 12) h = 0; return { time: `${String(h).padStart(2, '0')}:${m[2] || '00'}`, label: m[4].slice(0, 60) }; });
+    else if (!v) return render({ soft: true, keepFocus: '__none' });
+    saveKeyed('day_settings', 1, { [ds.dset]: v });
+    return render({ soft: true, keepFocus: '__none' });
+  }
+  const f = ds.field, fid = ds.id;
   if (f && fid) {
     const row = findRow('tasks', fid); if (!row) return;
     let v = e.target.value;
@@ -1179,7 +1577,7 @@ $app.addEventListener('keydown', (e) => {
 addEventListener('hashchange', () => { ui.sheet = null; ui.edit = false; ui.resetCount = null; render(); });
 addEventListener('online', () => { state.netFail = false; pull(); rt.wake(); });
 addEventListener('offline', updateBadge);
-document.addEventListener('visibilitychange', () => { if (!document.hidden) { T.apply(); pull(); rt.wake(); } });
+document.addEventListener('visibilitychange', () => { if (!document.hidden) { T.apply(); pull(); rt.wake(); kickCalendar(); } });
 addEventListener('pageshow', (e) => { if (e.persisted) { pull(); rt.wake(); } });
 // Auto dim: re-check the clock each minute.
 setInterval(() => { const before = document.documentElement.className; T.apply(); if (document.documentElement.className !== before) render({ soft: true }); }, 60000);
@@ -1220,3 +1618,4 @@ if ('serviceWorker' in navigator && !PREVIEW) {
 
 render();
 pull();
+kickCalendar();
