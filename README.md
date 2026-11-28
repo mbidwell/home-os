@@ -24,7 +24,7 @@ This repo is a template: it holds no names, addresses, chores, or calendar data.
     - Add them as Edge Function secrets in Supabase (Edge Functions > Secrets): `GOOGLE_ICS_URL` and `OUTLOOK_ICS_URL`. Never put them in this repo.
     - Deploy: `supabase functions deploy calendar-sync --project-ref <your-ref> --no-verify-jwt --use-api` (it's triggered by cron and by the app; it returns no calendar data).
     - Schedule every 30 minutes with the commented SQL in `setup.sql` section 8.
-    - Rules: QGenda entries (description contains "AutoSync from QGenda") with "call" in the title are On call; "Off" is not a shift; other timed ones are Working. "Event Physician" entries are listed under Event shifts. Overnight shifts and overnight activations make the next morning Post call (hours set in Settings).
+    - Rules: QGenda entries (description contains "AutoSync from QGenda") with "call" in the title are On call; "Off" is not a shift; other timed ones are Working. Upcoming "Event Physician" entries are listed under Event shifts. Overnight shifts and overnight activations make the next morning Post call (hours set in Settings).
 
 ## Notes
 

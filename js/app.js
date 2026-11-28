@@ -9,7 +9,7 @@ import * as C from './cheer.js';
 import * as A from './aisles.js';
 import * as R from './routines.js';
 
-const VERSION = '26';
+const VERSION = '27';
 const T = window.homeosTheme;
 const Q = new URLSearchParams(location.search);
 const PREVIEW = T.isPreview ? Q.get('preview') : null; // local screenshots only
@@ -195,6 +195,7 @@ const I = {
   moon: '<path d="M19.5 14.6A7.8 7.8 0 1 1 9.4 4.5a6.2 6.2 0 0 0 10.1 10.1z"/>',
   sun: '<circle cx="12" cy="12" r="4"/><path d="M12 2.8v2M12 19.2v2M2.8 12h2M19.2 12h2M5.5 5.5l1.4 1.4M17.1 17.1l1.4 1.4M5.5 18.5l1.4-1.4M17.1 6.9l1.4-1.4"/>',
   chev: '<path d="M9 5.5 15.5 12 9 18.5"/>',
+  back: '<path d="M15 5.5 8.5 12 15 18.5"/>',
   arr: '<path d="M5 12h14M13 6l6 6-6 6"/>',
   check: '<path d="M5 12.5 10 17.5 19 7"/>',
   cart: '<path d="M3 4.5h2.4l2.1 10.2h10.4l2-7.4H6.6"/><circle cx="9.5" cy="19" r="1.4"/><circle cx="16.5" cy="19" r="1.4"/>',
@@ -553,8 +554,12 @@ function phoneLine(th) {
   return th.dimOn ? 'Night Shift, dims at 10 PM' : 'Night Shift';
 }
 
+// Pages you reach from a link get a back button to where they came from.
+const BACK = { events: ['#/settings', 'Settings'], calendar: ['#/home', 'Today'], kids: ['#/home', 'Today'], reset: ['#/chores', 'Chores'] };
 function header(eyebrow, title) {
-  return `<header class="hd"><div class="top"><p class="eyebrow">${eyebrow}</p>${badgeHtml()}</div><h1>${title}</h1></header>`;
+  const b = BACK[route()];
+  const back = b ? `<a class="back press" href="${b[0]}" aria-label="Back to ${b[1]}">${ic('back')}${b[1]}</a>` : '';
+  return `<header class="hd">${back}<div class="top"><p class="eyebrow">${eyebrow}</p>${badgeHtml()}</div><h1>${title}</h1></header>`;
 }
 
 function dock(on) {
@@ -1737,36 +1742,19 @@ const eventShifts = () => calRows().filter((r) => r.kind === 'event_shift').sort
 const shiftHours = (e) => (e.starts_at && e.ends_at ? Math.round(((Date.parse(e.ends_at) - Date.parse(e.starts_at)) / 3600000) * 4) / 4 : 0);
 const fmtHrs = (h) => `${+h.toFixed(2)} hr${h === 1 ? '' : 's'}`;
 const shiftDay = (e) => new Date(S.parse(e.start_date)).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' });
-const shiftLine = (e) => `${shiftDay(e)} · ${e.title} · ${e.starts_at ? D.hoursLabel(e.starts_at, e.ends_at, TZ) : 'all day'} · ${fmtHrs(shiftHours(e))}`;
 
 function eventsView() {
   const today = todayStr();
-  const all = eventShifts();
-  const past = all.filter((e) => e.start_date <= today), next = all.filter((e) => e.start_date > today).reverse();
-  const byMonth = new Map();
-  for (const e of past) { const k = e.start_date.slice(0, 7); if (!byMonth.has(k)) byMonth.set(k, []); byMonth.get(k).push(e); }
-  const row = (e) => `<div class="it"><span class="nm">${esc(e.title)}<span class="meta"><b>${esc(shiftDay(e).replace(/, \d{4}$/, ''))}</b> · ${e.starts_at ? D.hoursLabel(e.starts_at, e.ends_at, TZ) : 'All day'} · ${fmtHrs(shiftHours(e))}</span></span></div>`;
-  const months = [...byMonth.entries()].map(([k, es]) => {
-    const label = new Date(`${k}-01T12:00:00Z`).toLocaleDateString(undefined, { month: 'long', year: 'numeric', timeZone: 'UTC' });
-    return `<div class="sec"><b>${esc(label)}</b><button class="clear press" data-act="ecopy" data-m="${k}">Copy · ${fmtHrs(es.reduce((t, e) => t + shiftHours(e), 0))}</button></div><div class="list">${es.map(row).join('')}</div>`;
-  }).join('');
-  const recent = past.length;
-  return `${header(recent ? `${plural(recent, 'shift')} worked · ${fmtHrs(past.reduce((t, e) => t + shiftHours(e), 0))}` : 'Event medicine', 'Event shifts')}
+  const next = eventShifts().filter((e) => e.start_date >= today).reverse(); // soonest first
+  const row = (e) => `<div class="it"><span class="nm">${esc(e.title)}<span class="meta"><b>${esc(S.dueLabel(e.start_date, today) === 'Today' ? 'Today' : shiftDay(e).replace(/, \d{4}$/, ''))}</b> · ${e.starts_at ? D.hoursLabel(e.starts_at, e.ends_at, TZ) : 'All day'} · ${fmtHrs(shiftHours(e))}</span></span></div>`;
+  return `${header(next.length ? `${plural(next.length, 'shift')} coming up` : 'Event medicine', 'Event shifts')}
   <main>
-    <p class="rs-sum">From your calendar’s “Event Physician” entries. Copy a month and paste it to Claude with your pay email to check nothing was missed.</p>
-    ${next.length ? `${sec('Coming up', next.length)}<div class="list">${next.map(row).join('')}</div>` : ''}
-    ${months || (!next.length ? `<p class="empty">No event shifts found yet. They show up once the calendar is connected.</p>` : '')}
+    <p class="rs-sum">Upcoming “Event Physician” entries from your calendar.</p>
+    ${next.length ? `<div class="list">${next.map(row).join('')}</div>` : `<p class="empty">No event shifts coming up. New ones show up here once they’re on your calendar.</p>`}
   </main>
   ${dock('home')}`;
 }
 
-async function copyShifts(month, btn) {
-  const es = eventShifts().filter((e) => e.start_date.startsWith(month) && e.start_date <= todayStr()).reverse(); // worked only
-  const label = new Date(`${month}-01T12:00:00Z`).toLocaleDateString(undefined, { month: 'long', year: 'numeric', timeZone: 'UTC' });
-  const text = `Event medicine shifts, ${label} (from my calendar):\n${es.map(shiftLine).join('\n')}\nTotal: ${es.length} shifts, ${fmtHrs(es.reduce((t, e) => t + shiftHours(e), 0))}\n\nPlease compare these against my pay email and list any shift or hours that are missing or different.`;
-  try { await navigator.clipboard.writeText(text); btn.classList.add('jelly'); btn.textContent = 'Copied'; setTimeout(() => render({ soft: true, keepFocus: '__none' }), 1400); }
-  catch { prompt('Copy this:', text); }
-}
 
 /* activation */
 function activationSheet(date) {
@@ -2418,7 +2406,6 @@ $app.addEventListener('click', (e) => {
     case 'addcal': ui.sheet = { type: 'addcal', id }; return soft();
     case 'ics': { const k = findRow('kid_items', id); if (k && k.starts_at) downloadIcs(k); ui.sheet = null; return soft(); }
     // event shifts
-    case 'ecopy': copyShifts(t.dataset.m, t); return;
     case 'calsync': syncNow(); return;
     case 'resetweek': {
       if (t.classList.contains('ld')) return;
